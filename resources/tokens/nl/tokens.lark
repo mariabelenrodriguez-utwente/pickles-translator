@@ -1,0 +1,48 @@
+VARIABLE_SETTINGS: "Variabeleninstelling"
+SCENARIO: "Scenario"
+GIVEN: "Gegeven"
+WHEN: "Wanneer"
+THEN: "Dan"
+
+SUCHTHAT: "zodanig dat: "
+INITCOND: "Het systeem is in de beginstatus"
+
+ISA: "is een "
+WITHRANGE: " en bereik "
+
+ISANARRAY: " is een array van "
+ELEMENTSSUCHTHAT: " elementen zodanig dat elk element "
+
+IS_A_STRUCTURE_WITH_ATTRIBUTES: "is een structuur met attributen "
+
+HAS: "heeft "
+HAS_ATTRIBUTES_SUCH_THAT: "heeft attributen zodanig dat: "
+
+ELEMENTS_WHERE_EACH_ELEMENT: " elementen waarbij elk element "
+
+BOOLEAN_TYPE: "booleaan"
+STRING_TYPE: "tekenreeks"
+INTEGER_TYPE: "geheel getal"
+DECIMAL_TYPE: "decimaal"
+
+EQUAL_TO: "gelijk aan "
+GREATER_THAN: "groter dan "
+LOWER_THAN: "kleiner dan "
+GREATER_OR_EQUAL_THAN: "groter of gelijk aan "
+LOWER_OR_EQUAL_THAN: "kleiner of gelijk aan "
+
+AT_LEAST: "ten minste "
+AT_MOST: "hoogstens "
+EXACTLY: "exact "
+BETWEEN: "tussen "
+AND: " en "
+
+AND_STEP: "En "
+
+BOOL_LIT: "waar" | "onwaar"
+
+STORED: "opgeslagen "
+CONJOP: "EN" | "OF"
+
+QUOTE: "\""
+COMMA: ","

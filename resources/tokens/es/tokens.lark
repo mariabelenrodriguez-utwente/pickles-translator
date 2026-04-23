@@ -1,0 +1,50 @@
+// tokens_es.lark
+
+VARIABLE_SETTINGS: "Configuración de Variables"
+SCENARIO: "Escenario"
+GIVEN: "Dado"
+WHEN: "Cuando"
+THEN: "Entonces"
+
+SUCHTHAT: "tal que: "
+INITCOND: "El sistema está en su estado inicial"
+
+ISA: "es un " | "es una "
+WITHRANGE: " y rango "
+
+ISANARRAY: " es un arreglo de "
+ELEMENTSSUCHTHAT: " elementos tal que cada elemento "
+
+IS_A_STRUCTURE_WITH_ATTRIBUTES: "es una estructura con atributos "
+
+HAS: "tiene "
+HAS_ATTRIBUTES_SUCH_THAT: "tiene atributos tales que: "
+
+ELEMENTS_WHERE_EACH_ELEMENT: " elementos donde cada elemento "
+
+BOOLEAN_TYPE: "booleano"
+STRING_TYPE: "cadena"
+INTEGER_TYPE: "entero"
+DECIMAL_TYPE: "decimal"
+
+EQUAL_TO: "igual a "
+GREATER_THAN: "mayor que "
+LOWER_THAN: "menor que "
+GREATER_OR_EQUAL_THAN: "mayor o igual que "
+LOWER_OR_EQUAL_THAN: "menor o igual que "
+
+AT_LEAST: "al menos "
+AT_MOST: "como máximo "
+EXACTLY: "exactamente "
+BETWEEN: "entre "
+AND: " y "
+
+AND_STEP: "Y "
+
+BOOL_LIT: "verdadero" | "falso"
+
+STORED: "almacenado "
+CONJOP: "Y" | "O"
+
+QUOTE: "\""
+COMMA: ","

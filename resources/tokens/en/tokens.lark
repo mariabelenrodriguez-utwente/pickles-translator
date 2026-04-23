@@ -1,0 +1,50 @@
+SCENARIO: "Scenario"
+VARIABLE_SETTINGS: "Variable Settings"
+GIVEN: "Given "
+WHEN: "When "
+THEN: "Then "
+AND_STEP: "And "
+
+SUCHTHAT: "such that:"
+INITCOND: "the system is in its initial state"
+
+ISA: "is a " | "is an "
+WITHRANGE: "with range "
+
+ISANARRAY: "array of "
+
+IS_A_STRUCTURE_WITH_ATTRIBUTES: "is a structure with attributes "
+
+HAS_ATTRIBUTES_SUCH_THAT: "has attributes such that:"
+
+ELEMENTS_WHERE_EACH_ELEMENT: "elements where each element "
+
+BOOLEAN_TYPE: "boolean"
+STRING_TYPE: "string"
+INTEGER_TYPE: "integer"
+DECIMAL_TYPE: "decimal"
+
+HAS: "has"
+IS: "is"
+
+EQUAL_TO: "equal to "
+NOT_EQUAL_TO: "not equal to "
+GREATER_THAN: "greater than "
+LOWER_THAN: "lower than "
+GREATER_OR_EQUAL_THAN: "greater or equal than "
+LOWER_OR_EQUAL_THAN: "lower or equal than "
+
+AT_LEAST: "at least "
+AT_MOST: "at most "
+EXACTLY: "exactly "
+ALL: "all "
+BETWEEN: "between "
+AND: "and "
+
+BOOL_LIT: "true" | "false"
+
+STORED: "stored "
+CONJOP: "AND" | "OR"
+
+QUOTE: "\""
+COMMA: ","

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><<<TITLE_ESC>>></title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { display: flex; flex-direction: column; height: 100vh; font-family: monospace; }
+    #toolbar {
+      padding: 8px 14px; background: #2c2c2c; color: #eee;
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    }
+    #toolbar h1 { font-size: 13px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #toolbar button {
+      padding: 4px 10px; font-family: monospace; font-size: 12px;
+      cursor: pointer; border: 1px solid #888; background: #444;
+      color: #eee; border-radius: 3px;
+    }
+    #toolbar button:hover { background: #666; }
+    #main { display: flex; flex: 1; overflow: hidden; }
+    #cy { flex: 1; background: #fafafa; }
+    #panel {
+      width: 340px; min-width: 180px; overflow-y: auto;
+      background: #fff; border-left: 1px solid #ccc; padding: 14px;
+      font-size: 12px;
+    }
+    #panel h2 {
+      font-size: 11px; font-weight: bold; text-transform: uppercase;
+      letter-spacing: .06em; color: #666; margin-bottom: 8px;
+      border-bottom: 1px solid #eee; padding-bottom: 4px;
+    }
+    #panel h2 + h2 { margin-top: 14px; }
+    .hint { color: #999; font-style: italic; }
+    .detail-row { margin-bottom: 10px; }
+    .detail-label { font-weight: bold; color: #555; display: block; margin-bottom: 2px; }
+    .detail-value { color: #111; overflow-wrap: break-word; }
+    .dir-in  { color: #2255aa; }
+    .dir-out { color: #aa5522; }
+    .legend-entry { display: flex; gap: 6px; margin-bottom: 5px; line-height: 1.4; }
+    .legend-id { font-weight: bold; color: #2255aa; white-space: nowrap; min-width: 38px; }
+    .legend-val { color: #333; overflow-wrap: break-word; }
+    .node-key { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+    .ndot {
+      width: 14px; height: 14px; border-radius: 50%; border: 2px solid;
+      display: inline-block; flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <h1><<<TITLE_ESC>>></h1>
+    <button id="btn-fit">Fit</button>
+    <button id="btn-png">Export PNG</button>
+  </div>
+  <div id="main">
+    <div id="cy"></div>
+    <div id="panel">
+      <h2>Switch detail</h2>
+      <div id="detail"><span class="hint">Click a switch to see its full details.</span></div>
+
+      <h2>Location types</h2>
+      <div class="node-key">
+        <span class="ndot" style="background:#aaddaa;border-color:#226622"></span> Initial location
+      </div>
+      <div class="node-key">
+        <span class="ndot" style="background:#ffeecc;border-color:#cc8800;border-style:dashed"></span>
+        Open location
+      </div>
+      <div class="node-key">
+        <span class="ndot" style="background:#ddeeff;border-color:#4488bb"></span> Closed location
+      </div>
+
+      <h2>Gates</h2>
+      <div id="legend-gates"><<<LEGEND_GATES>>></div>
+
+      <h2>Guards</h2>
+      <div id="legend-guards"><<<LEGEND_GUARDS>>></div>
+    </div>
+  </div>
+  <script>
+    var elements   = <<<ELEMENTS>>>;
+    var gatesData  = <<<GATES_DATA>>>;
+    var guardsData = <<<GUARDS_DATA>>>;
+    var initialNode = <<<INITIAL_NODE>>>;
+    var exportFilename = <<<FILENAME>>>;
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function expandGuard(guardStr) {
+      return guardStr.replace(/\\bG\\d+\\b/g, function(id) {
+        return guardsData[id] !== undefined
+          ? '(' + escHtml(guardsData[id]) + ')'
+          : escHtml(id);
+      });
+    }
+
+    var cy = cytoscape({
+      container: document.getElementById('cy'),
+      elements: elements,
+      layout: {
+        name: 'breadthfirst',
+        directed: true,
+        roots: [initialNode],
+        padding: 40,
+        spacingFactor: 1.5,
+      },
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'label': 'data(label)',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'font-family': 'monospace',
+            'font-size': '11px',
+            'width': 56,
+            'height': 56,
+            'background-color': '#ddeeff',
+            'border-width': 2,
+            'border-color': '#4488bb',
+          }
+        },
+        {
+          selector: 'node[type="initial"]',
+          style: {
+            'background-color': '#aaddaa',
+            'border-color': '#226622',
+            'border-width': 3,
+          }
+        },
+        {
+          selector: 'node[type="open"]',
+          style: {
+            'background-color': '#ffeecc',
+            'border-color': '#cc8800',
+            'border-style': 'dashed',
+          }
+        },
+        {
+          selector: 'node:selected',
+          style: { 'border-width': 4, 'border-color': '#0044cc' }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'label': 'data(label)',
+            'font-family': 'monospace',
+            'font-size': '10px',
+            'curve-style': 'bezier',
+            'target-arrow-shape': 'triangle',
+            'arrow-scale': 1.2,
+            'line-color': '#888',
+            'target-arrow-color': '#888',
+            'text-background-color': '#fafafa',
+            'text-background-opacity': 0.85,
+            'text-background-padding': '2px',
+          }
+        },
+        {
+          selector: 'edge:selected',
+          style: {
+            'line-color': '#0055cc',
+            'target-arrow-color': '#0055cc',
+            'font-weight': 'bold',
+          }
+        }
+      ]
+    });
+
+    cy.on('tap', 'edge', function(evt) {
+      var d    = evt.target.data();
+      var gate = gatesData[d.gateId] || {};
+      var dirClass = gate.direction === 'input' ? 'dir-in' : 'dir-out';
+      var dirLabel = gate.direction === 'input' ? 'input ↓' : 'output ↑';
+      var params   = (gate.parameters || []).join(', ') || '\u2014';
+      var expGuard = expandGuard(d.guard);
+      var asgn     = (d.assignment || [])
+        .map(function(a) { return escHtml(a.variable) + ' := ' + escHtml(a.expression); })
+        .join('<br>') || '\u2014';
+
+      document.getElementById('detail').innerHTML =
+        '<div class="detail-row">' +
+          '<span class="detail-label">Switch</span>' +
+          '<span class="detail-value">' + escHtml(d.switchId) + '</span>' +
+        '</div>' +
+        '<div class="detail-row">' +
+          '<span class="detail-label">From \u2192 To</span>' +
+          '<span class="detail-value">' + escHtml(d.source) + ' \u2192 ' + escHtml(d.target) + '</span>' +
+        '</div>' +
+        '<div class="detail-row">' +
+          '<span class="detail-label">Gate (<span class="' + dirClass + '">' + dirLabel + '</span>)</span>' +
+          '<span class="detail-value"><b>' + escHtml(d.gateId) + '</b>: ' +
+            escHtml(gate.text || '?') + ' [' + escHtml(params) + ']</span>' +
+        '</div>' +
+        '<div class="detail-row">' +
+          '<span class="detail-label">Guard</span>' +
+          '<span class="detail-value">' + expGuard + '</span>' +
+        '</div>' +
+        '<div class="detail-row">' +
+          '<span class="detail-label">Assignment</span>' +
+          '<span class="detail-value">' + asgn + '</span>' +
+        '</div>';
+    });
+
+    cy.on('tap', function(evt) {
+      if (evt.target === cy) {
+        document.getElementById('detail').innerHTML =
+          '<span class="hint">Click a switch to see its full details.</span>';
+      }
+    });
+
+    document.getElementById('btn-fit').addEventListener('click', function() {
+      cy.fit(undefined, 40);
+    });
+
+    document.getElementById('btn-png').addEventListener('click', function() {
+      var blob = cy.png({ output: 'blob', bg: 'white', scale: 2 });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = exportFilename + '.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    });
+  </script>
+</body>
+</html>

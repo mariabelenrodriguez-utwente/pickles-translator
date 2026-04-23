@@ -1,0 +1,95 @@
+%import .tokens (VARIABLE_SETTINGS,SCENARIO,GIVEN,WHEN,THEN,AND_STEP,SUCHTHAT,INITCOND,ISA,IS,WITHRANGE,ISANARRAY,IS_A_STRUCTURE_WITH_ATTRIBUTES,HAS,HAS_ATTRIBUTES_SUCH_THAT,ELEMENTS_WHERE_EACH_ELEMENT,BOOLEAN_TYPE,STRING_TYPE,INTEGER_TYPE,DECIMAL_TYPE,EQUAL_TO,NOT_EQUAL_TO,GREATER_THAN,LOWER_THAN,GREATER_OR_EQUAL_THAN,LOWER_OR_EQUAL_THAN,AT_LEAST,AT_MOST,EXACTLY,ALL,BETWEEN,AND,STORED,CONJOP,QUOTE,COMMA,BOOL_LIT)
+%import common.ESCAPED_STRING   -> STRING
+%import common.SIGNED_NUMBER
+UNSIGNED_NUMBER: /[0-9]+(\.[0-9]+)?/
+STR_LIT: /\'[^\']*\'/
+STRUCT_END: "<endstruct>"
+%import common.WS
+%ignore WS
+
+specsuite: vardefblock scenario+
+
+vardefblock: VARIABLE_SETTINGS vardef+
+
+vardef: QUOTE varid QUOTE typedesc
+
+scenario: SCENARIO scenariodescription? given? when then
+
+given: GIVEN (INITCOND | step) andstep*
+when:  WHEN  step andstep*
+then:  THEN  step andstep*
+
+andstep: AND_STEP step
+
+step: steptext (((QUOTE varid QUOTE COMMA?)+ SUCHTHAT guardblock) | ((QUOTE varid QUOTE) op expvalue))? // If there is a single primitive variable, add syntactic sugar to allow guards without "such that"
+steptext: /[A-Za-z0-9][A-Za-z0-9 \t]*/
+
+typedesc: primitive | array | struct
+
+primitive: ISA primtype WITHRANGE range
+
+primtype: BOOLEAN_TYPE | STRING_TYPE | INTEGER_TYPE | DECIMAL_TYPE
+
+array: ISA ISANARRAY cardinality ELEMENTS_WHERE_EACH_ELEMENT typedesc
+
+cardinality: AT_MOST UNSIGNED_NUMBER
+           | EXACTLY UNSIGNED_NUMBER
+           | BETWEEN UNSIGNED_NUMBER AND UNSIGNED_NUMBER
+
+struct: IS_A_STRUCTURE_WITH_ATTRIBUTES QUOTE attrid QUOTE (COMMA QUOTE attrid QUOTE)* SUCHTHAT attrdesc+ STRUCT_END
+
+attrdesc: QUOTE attrid QUOTE typedesc
+
+guardblock: QUOTE varid QUOTE guard (CONJOP QUOTE varid QUOTE guard)*
+
+guard: primguard | arrayguard | structguard
+
+primguard: IS op expvalue
+
+op: EQUAL_TO
+  | NOT_EQUAL_TO
+  | GREATER_THAN
+  | LOWER_THAN
+  | GREATER_OR_EQUAL_THAN
+  | LOWER_OR_EQUAL_THAN
+  | BETWEEN (atom | varref) AND
+
+arrayguard: quantifier UNSIGNED_NUMBER ELEMENTS_WHERE_EACH_ELEMENT guard
+           | HAS ALL ELEMENTS_WHERE_EACH_ELEMENT guard
+
+quantifier: HAS AT_LEAST
+          | HAS AT_MOST
+          | HAS EXACTLY
+
+structguard: HAS_ATTRIBUTES_SUCH_THAT attrguard (CONJOP attrguard)*
+
+attrguard: QUOTE attrid QUOTE guard
+
+expvalue: arithexpr
+
+varref: STORED? QUOTE varid QUOTE
+
+attrid: /[A-Za-z0-9][A-Za-z0-9 \t]*/
+varid: /[A-Za-z0-9][A-Za-z0-9 \t]*/
+
+scenariodescription: /[^\n]+/
+
+range: "(" /[^()\[\]{}]+/ ")" | "[" /[^\[\](){}]+/ "]" | "{" /[^{}()\[\]]+/ "}"
+
+?arithexpr: arithexpr "+" arithexpr   -> add
+          | arithexpr "-" arithexpr   -> sub
+          | arithexpr "*" arithexpr   -> mul
+          | arithexpr "/" arithexpr   -> div
+          | arithexpr "in" set_expr   -> in_op
+          | arithexpr "not" "in" set_expr -> not_in_op
+          | atom
+          | varref
+
+?atom: UNSIGNED_NUMBER
+     | SIGNED_NUMBER
+     | STR_LIT
+     | BOOL_LIT
+     | "(" arithexpr ")"
+     | range
+
+set_expr: "{" [atom ("," atom)*] "}"
