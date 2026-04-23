@@ -1,0 +1,154 @@
+[
+    {
+        "initial_location": "L0_comp",
+        "initial_values": {
+            "availability": "AV",
+            "enabledness": true,
+            "critical-section-lane": 1,
+            "critical-section-start": 2.0,
+            "critical-section-end": 2.5,
+            "faulty-detectors": [
+                {
+                    "lane": 1, "length-position": 1.5
+                },
+                {
+                    "lane": 1, "length-position": 1.5
+                },
+                {
+                    "lane": 1, "length-position": 1.5
+                }
+            ]
+        },
+        "steps": [
+            {
+                "switch_id": "r_5",
+                "values": {
+                    "faulty-detectors_p": [
+                        {
+                            "lane": 1, "length-position": 2.0
+                        },
+                        {
+                            "lane": 1, "length-position": 2.8
+                        },
+                        {
+                            "lane": 1, "length-position": 2.2
+                        }
+                    ]
+                }
+            },
+            {
+                "switch_id": "r_6",
+                "values": {}
+            },
+                        {
+                "switch_id": "r_31",
+                "values": {}
+            },
+            {
+                "switch_id": "r_32",
+                "values": {}
+            }
+        ]
+    },
+    {
+        "initial_location": "L0_comp",
+        "initial_values": {
+            "availability": "AV",
+            "enabledness": true,
+            "critical-section-lane": 1,
+            "critical-section-start": 2.0,
+            "critical-section-end": 2.5,
+            "faulty-detectors": [
+                {
+                    "lane": 1, "length-position": 1.5
+                }
+            ]
+        },
+        "steps": [
+            {
+                "switch_id": "r_1",
+                "values": {
+                    "faulty-detectors_p": [
+                        {
+                            "lane": 2, "length-position": 1.3
+                        }
+                    ]
+                }
+            },
+            {
+                "switch_id": "r_2",
+                "values": {}
+            },
+            {
+                "switch_id": "r_9",
+                "values": {
+                    "faulty-detectors_p": [
+                        {
+                            "lane": 3, "length-position": 2.2
+                        },
+                        {
+                            "lane": 2, "length-position": 1.3
+                        }
+                    ]
+                }
+            },
+            {
+                "switch_id": "r_10",
+                "values": {}
+            },
+            {
+                "switch_id": "r_11",
+                "values": {
+                    "faulty-detectors_p": [
+                        {
+                            "lane": 2, "length-position": 1.3
+                        },
+                        {
+                            "lane": 1, "length-position": 2.2
+                        },
+                        {
+                            "lane": 3, "length-position": 1.15
+                        }
+                    ]
+                }
+            },
+            {
+                "switch_id": "r_12",
+                "values": {}
+            },
+            {
+                "switch_id": "r_15",
+                "values": {}
+            },
+            {
+                "switch_id": "r_16",
+                "values": {}
+            }
+        ]
+    },
+       {
+        "initial_location": "L0_comp",
+        "initial_values": {
+            "availability": "AV",
+            "enabledness": true,
+            "critical-section-lane": 1,
+            "critical-section-start": 2.0,
+            "critical-section-end": 2.5,
+            "faulty-detectors": [
+                {
+                    "lane": 1, "length-position": 1.5
+                }
+            ]
+        },
+        "steps": [
+            {
+                "switch_id": "r_7",
+                "values": {}
+            },
+            {
+                "switch_id": "r_8",
+                "values": {}
+            }
+        ]
+    }
+]

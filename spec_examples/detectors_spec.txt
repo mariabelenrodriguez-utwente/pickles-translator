@@ -1,0 +1,52 @@
+Variable Settings
+"availability" is a string with range {AV, PART AV, NOT AV}
+"enabledness" is a boolean with range {true, false}
+"faulty detectors" is an array of at most 3 elements where each element is a structure with attributes "lane", "lenght position" such that:
+  "lane" is an integer with range [1,3]
+  "length position" is a decimal with range (1.0,3.0)
+"critical section lane" is an integer with range [1,3]
+"critical section start" is a decimal with range (1.0,3.0)
+"critical section end" is a decimal with range (1.0,3.0)
+
+Scenario 01: faulty detectors outside the critical section
+Given the system is in its initial state
+And the user interface displays information on "enabledness", "availability" such that:
+  "enabledness" is equal to true AND
+  "availability" is equal to 'AV'
+When the controller detects "faulty detectors" such that:
+  "faulty detectors" has all elements where each element has attributes such that:
+    "lane" is not equal to "critical section lane" OR
+    "lenght position" is lower or equal than "critical section start" OR
+    "lenght position" is greater or equal than "critical section end"
+Then the user interface displays "availability" equal to 'AV'
+
+Scenario 02: a single faulty detector in the critical section
+Given the system is in its initial state
+And the user interface displays information on "enabledness", "availability" such that:
+  "enabledness" is equal to true AND
+  "availability" is equal to 'AV'
+When the controller detects "faulty detectors" such that:
+  "faulty detectors" has exactly 1 elements where each element has attributes such that:
+    "lane" is equal to "critical section lane" AND
+    "lenght position" is greater than "critical section start" AND
+    "lenght position" is lower than "critical section end"
+Then the user interface displays "availability" equal to 'PART AV'
+
+Scenario 03: at least two faulty detectors in the critical section
+Given the system is in its initial state
+And the user interface displays information on "enabledness", "availability" such that:
+  "enabledness" is equal to true AND
+  "availability" is equal to 'AV'
+When the controller detects "faulty detectors" such that:
+  "faulty detectors" has at least 2 elements where each element has attributes such that:
+    "lane" is equal to "critical section lane" AND
+    "lenght position" is greater than "critical section start" AND
+    "lenght position" is lower than "critical section end"
+Then the user interface displays "availability" equal to 'NOT AV'
+
+Scenario 04: lost controller access disables the system
+Given the system is in its initial state
+And the user interface displays information on "enabledness" such that:
+  "enabledness" is equal to true
+When the controller access is lost
+Then the user interface reports status "enabledness" equal to false
