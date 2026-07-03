@@ -8,8 +8,9 @@ from src.transformer import (
     PicklesToSTS,
     _format_id,
     _serialize_guard,
+    render_guard_expr,
     PrimGuard, StructGuard, ArrayGuard,
-    AttrGuardEntry,
+    AttrGuardEntry, VarRef,
 )
 
 _pickles = PicklesToSTS()
@@ -80,25 +81,45 @@ class TestSerializeGuard:
         return Token("UNSIGNED_NUMBER", v)
 
     def test_primguard_simple(self) -> None:
+        """The "_p" suffix (if wanted) is baked into context by the caller (to_tree);
+        _serialize_guard itself just uses context as given."""
         guard = PrimGuard("==", self._num("5"))
-        assert _serialize_guard(guard, "x") == "x == 5"
+        assert _serialize_guard(guard, "x_p") == {"lhs": "x_p", "op": "==", "rhs": 5}
+
+    def test_primguard_as_state(self) -> None:
+        """A bare context (e.g. a Given step, or a 'stored' subject) stays bare."""
+        guard = PrimGuard("==", self._num("5"))
+        assert _serialize_guard(guard, "x") == {"lhs": "x", "op": "==", "rhs": 5}
+
+    def test_primguard_rhs_always_param_even_when_lhs_is_stored(self) -> None:
+        """rhs (the value) is always the parameter, regardless of the subject's stored-ness."""
+        guard = PrimGuard("==", VarRef("y"))
+        assert _serialize_guard(guard, "x") == {
+            "lhs": "x", "op": "==", "rhs": "y_p",
+        }
 
     def test_primguard_with_sanitized_context(self) -> None:
         guard = PrimGuard(">", self._num("18"))
-        assert _serialize_guard(guard, "user-age") == "user-age > 18"
+        assert _serialize_guard(guard, "user-age_p") == {"lhs": "user-age_p", "op": ">", "rhs": 18}
 
     def test_structguard_single_attribute(self) -> None:
+        """The "_p" suffix sits right after the base ("det_p"), not at the leaf."""
         inner = PrimGuard("!=", self._num("0"))
         entry = AttrGuardEntry("lane", inner)
         guard = StructGuard([entry])
-        assert _serialize_guard(guard, "det") == "det.lane != 0"
+        assert _serialize_guard(guard, "det_p") == {"lhs": "det_p.lane", "op": "!=", "rhs": 0}
 
     def test_structguard_two_attributes_with_conjunction(self) -> None:
         e1 = AttrGuardEntry("lane",   PrimGuard("==", self._num("1")))
         e2 = AttrGuardEntry("length", PrimGuard(">",  self._num("2")), conj="AND")
         guard = StructGuard([e1, e2])
-        result = _serialize_guard(guard, "obj")
-        assert result == "obj.lane == 1 && obj.length > 2"
+        result = _serialize_guard(guard, "obj_p")
+        assert result == {
+            "lhs": {"lhs": "obj_p.lane", "op": "==", "rhs": 1},
+            "op":  "&&",
+            "rhs": {"lhs": "obj_p.length", "op": ">", "rhs": 2},
+        }
+        assert render_guard_expr(result) == "(obj_p.lane == 1 && obj_p.length > 2)"
 
     @pytest.mark.parametrize("quantifier, count, max_slots", [
         ("exactly",  2, 3),
@@ -113,20 +134,20 @@ class TestSerializeGuard:
     ) -> None:
         inner = PrimGuard("==", self._num("1"))
         guard = ArrayGuard(quantifier, count, inner)
-        result = _serialize_guard(guard, "items", {"items": (1, max_slots)})
-        assert f"items.len() == {count}" in result
+        result = _serialize_guard(guard, "items_p", {"items": (1, max_slots)}, card_key="items")
+        assert f"items_p.len() == {count}" in render_guard_expr(result)
 
     def test_arrayguard_exactly_covers_only_declared_slots(self) -> None:
         inner = PrimGuard(">", self._num("0"))
         guard = ArrayGuard("exactly", 2, inner)
-        result = _serialize_guard(guard, "arr", {"arr": (2, 2)})
-        assert "(arr[0] > 0)" in result
-        assert "(arr[1] > 0)" in result
-        assert "arr[2]" not in result
+        result = render_guard_expr(_serialize_guard(guard, "arr_p", {"arr": (2, 2)}, card_key="arr"))
+        assert "arr_p[0] > 0" in result
+        assert "arr_p[1] > 0" in result
+        assert "arr_p[2]" not in result
 
     def test_arrayguard_at_most_all_slots_are_conditional(self) -> None:
         inner = PrimGuard("==", self._num("1"))
         guard = ArrayGuard("at_most", 1, inner)
-        result = _serialize_guard(guard, "arr", {"arr": (1, 2)})
-        assert "arr[0]" in result
-        assert "arr[1]" in result
+        result = render_guard_expr(_serialize_guard(guard, "arr_p", {"arr": (1, 2)}, card_key="arr"))
+        assert "arr_p[0]" in result
+        assert "arr_p[1]" in result

@@ -1,0 +1,239 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "sts_composed.schema.json",
+    "title": "Composed STS",
+    "description": "A single Symbolic Transition System that is the conjunction (composition) of all per-scenario partial STSs. Produced by the pickles-translator as '<timestamp>_<basename>_composed.json'. The composition merges locations via choice and sequential composition, and deduplicates identical guards, gates, and assignments across scenarios.",
+    "$ref": "#/$defs/composedSts",
+    "$defs": {
+        "variableDefinition": {
+            "title": "Variable Definition",
+            "description": "Type annotation and finite domain for a single STS variable.",
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+                "type": {
+                    "description": "Data type of the variable. 'decimal' maps to floating-point numbers.",
+                    "type": "string",
+                    "enum": ["string", "integer", "decimal", "boolean"]
+                },
+                "range": {
+                    "description": "Finite ordered list of allowed values. Element JSON type must be consistent with 'type': string→string, integer/decimal→number, boolean→boolean.",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "oneOf": [
+                            {"type": "string"},
+                            {"type": "number"},
+                            {"type": "boolean"}
+                        ]
+                    }
+                }
+            }
+        },
+        "gate": {
+            "title": "Gate",
+            "description": "An input or output gate with a natural-language label and a list of parameters it communicates.",
+            "type": "object",
+            "required": ["text", "parameters"],
+            "additionalProperties": false,
+            "properties": {
+                "text": {
+                    "description": "Natural-language label extracted from the Gherkin 'When' (input) or 'Then' (output) step.",
+                    "type": "string"
+                },
+                "shortname": {
+                    "description": "Optional short identifier for the gate, for display purposes.",
+                    "type": "string"
+                },
+                "parameters": {
+                    "description": "Ordered list of parameter IDs communicated by this gate. Each ID must be a key in the composed STS 'parameters' map. May be empty.",
+                    "type": "array",
+                    "items": {"type": "string"}
+                }
+            }
+        },
+        "guardExpr": {
+            "title": "Guard Expression",
+            "description": "A boolean/arithmetic expression node: a variable reference or literal leaf, or a nested operator node.",
+            "oneOf": [
+                {"type": "string", "description": "Variable reference (e.g. 'waterlevel', 'arr[0].lane', 'arr.len()') or string literal."},
+                {"type": "number"},
+                {"type": "boolean"},
+                {
+                    "type": "array",
+                    "description": "Set literal, used as the rhs of 'in' / 'not in'.",
+                    "items": {"$ref": "#/$defs/guardExpr"}
+                },
+                {
+                    "title": "Binary operator node",
+                    "type": "object",
+                    "required": ["lhs", "op", "rhs"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "lhs": {"$ref": "#/$defs/guardExpr"},
+                        "op": {"type": "string", "enum": ["==", "!=", ">", "<", ">=", "<=", "&&", "||", "+", "-", "*", "/", "in", "not in"]},
+                        "rhs": {"$ref": "#/$defs/guardExpr"}
+                    }
+                },
+                {
+                    "title": "Unary negation node",
+                    "type": "object",
+                    "required": ["op", "rhs"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "op": {"type": "string", "const": "!"},
+                        "rhs": {"$ref": "#/$defs/guardExpr"}
+                    }
+                }
+            ]
+        },
+        "assignment": {
+            "title": "Assignment",
+            "description": "A single variable update executed atomically when a switch fires.",
+            "type": "object",
+            "required": ["target", "expression"],
+            "additionalProperties": false,
+            "properties": {
+                "target": {
+                    "description": "Target variable ID. Must be a base-name key from the composed STS 'locationVariables' map (non-expanded).",
+                    "type": "string"
+                },
+                "expression": {
+                    "description": "Right-hand side expression. Typically the corresponding parameter ID, but may be a computed expression.",
+                    "$ref": "#/$defs/guardExpr"
+                }
+            }
+        },
+        "switch": {
+            "title": "Switch",
+            "description": "A labelled transition between two locations. Fires when the gate is triggered and the guard holds; executes the assignments on firing.",
+            "type": "object",
+            "required": ["init_loc", "gate", "guard", "assignments", "end_loc"],
+            "additionalProperties": false,
+            "properties": {
+                "init_loc": {
+                    "description": "Source location ID. Must appear in the composed STS 'locations' array.",
+                    "type": "string"
+                },
+                "gate": {
+                    "description": "ID of the triggering gate. Must be a key in the composed STS 'inputGates' or 'outputGates' map.",
+                    "type": "string"
+                },
+                "guard": {
+                    "description": "ID of the single guard from the composed STS 'guards' map that must hold for this switch to fire.",
+                    "type": "string"
+                },
+                "assignments": {
+                    "description": "Ordered list of assignment IDs from the composed STS 'assignments' map, executed when the switch fires. May be empty.",
+                    "type": "array",
+                    "items": {"type": "string"}
+                },
+                "end_loc": {
+                    "description": "Target location ID. Must appear in the composed STS 'locations' array.",
+                    "type": "string"
+                }
+            }
+        },
+        "composedSts": {
+            "title": "Composed STS",
+            "description": "The result of composing all partial STSs into a single system.",
+            "type": "object",
+            "required": [
+                "id",
+                "description",
+                "initial_location",
+                "gate_id_type",
+                "location_id_type",
+                "locationVariables",
+                "parameters",
+                "attributes",
+                "locations",
+                "inputGates",
+                "outputGates",
+                "guards",
+                "assignments",
+                "switches"
+            ],
+            "additionalProperties": false,
+            "properties": {
+                "id": {
+                    "description": "Fixed identifier for the composed STS. Always 'sts_composed'.",
+                    "type": "string",
+                    "const": "sts_composed"
+                },
+                "description": {
+                    "description": "Human-readable label listing all composed scenario IDs (e.g. 'Composition of scenarios sts_001, sts_002, sts_003, sts_004').",
+                    "type": "string",
+                    "pattern": "^Composition of scenarios sts_\\d{3}(, sts_\\d{3})*$"
+                },
+                "initial_location": {
+                    "description": "The single shared initial location for the composed STS. Always 'L0_comp'.",
+                    "type": "string",
+                    "const": "L0_comp"
+                },
+                "gate_id_type": {
+                    "description": "JSON type used for gate IDs.",
+                    "type": "string",
+                    "enum": ["string", "integer"]
+                },
+                "location_id_type": {
+                    "description": "JSON type used for location IDs.",
+                    "type": "string",
+                    "enum": ["string", "integer"]
+                },
+                "initialValuation": {
+                    "description": "Optional initial value per location variable.",
+                    "type": "object"
+                },
+                "locationVariables": {
+                    "description": "All state variables in the composed system, keyed by variable ID. Identical to the location variables from the partial STSs (they share the same domain). Array-of-struct variables are expanded: 'arrayName[i].attrName' is a separate entry.",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/variableDefinition"}
+                },
+                "parameters": {
+                    "description": "Gate parameters: one per location variable, keyed by the variable ID suffixed with '_p'. Same type and range as the source variable.",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/variableDefinition"}
+                },
+                "attributes": {
+                    "description": "Always empty: struct attribute types are inferable from the expanded 'locationVariables' keys (e.g. 'arr[0].attr').",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/variableDefinition"}
+                },
+                "locations": {
+                    "description": "All location IDs in the composed STS. Includes: 'L0_comp' (shared initial); 'L<i>_<N>' locations inherited from each partial STS; and compound locations 'L<a>_<x>_L<b>_<y>' generated by sequential composition (where the end of scenario X connects to the start of scenario Y).",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"type": "string"},
+                    "uniqueItems": true
+                },
+                "inputGates": {
+                    "description": "Input gates after deduplication across all partial STSs. Identical gates (same text and parameters) are merged. IDs are reassigned sequentially: 'In1', 'In2', ... (no underscore suffix, unlike partial STSs).",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/gate"}
+                },
+                "outputGates": {
+                    "description": "Output gates after deduplication across all partial STSs. Identical gates are merged. IDs: 'Out1', 'Out2', ...",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/gate"}
+                },
+                "guards": {
+                    "description": "Named guard expression trees after deduplication. Identical expressions from different partial STSs are merged into a single entry. IDs are reassigned sequentially: 'G1', 'G2', ...",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/guardExpr"}
+                },
+                "assignments": {
+                    "description": "Named variable assignments after deduplication. Identical (target, expression) pairs from different partial STSs are merged into a single entry. IDs are reassigned sequentially: 'A1', 'A2', ...",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/assignment"}
+                },
+                "switches": {
+                    "description": "All transitions from all composed partial STSs, with IDs reassigned to a single continuous sequence: 'r_1', 'r_2', ... Switches from partial STSs have their gate, guard, and assignment references remapped to the deduplicated composed IDs.",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/switch"}
+                }
+            }
+        }
+    }
+}
