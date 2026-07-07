@@ -12,9 +12,7 @@ from pathlib import Path
 import pytest
 from jsonschema import validate, ValidationError
 
-# ---------------------------------------------------------------------------
 # Schema loading
-# ---------------------------------------------------------------------------
 
 _SCHEMAS_DIR = Path(__file__).parent.parent / "schemas"
 
@@ -27,10 +25,7 @@ PARTIAL_SCHEMA    = _load("sts_partial.schema.json")
 COMPOSED_SCHEMA   = _load("sts_composed.schema.json")
 TEST_CASES_SCHEMA = _load("test_cases.schema.json")
 
-
-# ---------------------------------------------------------------------------
 # Builders
-# ---------------------------------------------------------------------------
 
 def _vardef(type_: str = "string", range_: list | None = None) -> dict:
     return {"type": type_, "range": range_ or ["AV", "NOT AV"]}
