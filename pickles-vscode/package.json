@@ -1,0 +1,27 @@
+{
+  "name": "pickles-syntax",
+  "displayName": "Pickles Syntax Highlighting",
+  "description": "Syntax highlighting for the Pickles specification language (.pickles files)",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "pickles",
+        "aliases": ["Pickles", "pickles"],
+        "extensions": [".pickles"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pickles",
+        "scopeName": "source.pickles",
+        "path": "./syntaxes/pickles.tmLanguage.json"
+      }
+    ]
+  }
+}
