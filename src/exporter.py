@@ -7,6 +7,8 @@ from html import escape as _he
 from pathlib import Path
 from typing import Any
 
+from src.transformer import render_guard_expr
+
 def _dot_attr_escape(s: str) -> str:
     """Escape a string for use as a DOT double-quoted attribute value.
 
@@ -46,7 +48,7 @@ class STSExporter:
         sts: An STS dict as produced by _scenario_to_sts or
             compose_stss. Must contain at minimum the keys
             id, description, locations, switches,
-            guards, inputActions, and outputActions.
+            guards, inputGates, and outputGates.
     """
 
     def __init__(self, sts: dict[str, Any]) -> None:
@@ -54,9 +56,7 @@ class STSExporter:
         self._initial_loc: str       = sts["initial_location"]
         self._open_states: set[str]  = self._compute_open_states()
         self._gate_index:  dict[str, dict[str, Any]] = self._build_gate_index()
-        self._guard_index: dict[str, str] = {
-            gid: g["expression"] for gid, g in sts["guards"].items()
-        }
+        self._guard_index: dict[str, Any] = sts["guards"]
         with open(Path(__file__).parent.parent / "resources" / "sts_template.html", encoding="utf-8") as f:
           self.html_template = f.read()
 
@@ -78,13 +78,13 @@ class STSExporter:
             "output").
         """
         index: dict[str, dict[str, Any]] = {}
-        for gid, ix in self._sts["inputActions"].items():
+        for gid, ix in self._sts["inputGates"].items():
             index[gid] = {
                 "text":       ix["text"],
                 "parameters": ix["parameters"],
                 "direction":  "input",
             }
-        for gid, ix in self._sts["outputActions"].items():
+        for gid, ix in self._sts["outputGates"].items():
             index[gid] = {
                 "text":       ix["text"],
                 "parameters": ix["parameters"],
@@ -185,26 +185,25 @@ class STSExporter:
             A self-contained HTML string that can be opened in any browser.
         """
         sts = self._sts
-
-        # cytoscape element list
         elements: list[dict[str, Any]] = []
         for loc in sts["locations"]:
             elements.append({
                 "group": "nodes",
                 "data":  {"id": loc, "label": loc, "type": self._node_type(loc)},
             })
+        assignment_index = sts.get("assignments", {})
         for sw_id, sw in sts["switches"].items():
             elements.append({
                 "group": "edges",
                 "data":  {
-                    "id":         sw_id,
-                    "source":     sw["init_loc"],
-                    "target":     sw["end_loc"],
-                    "label":      sw_id,
-                    "switchId":   sw_id,
-                    "gateId":     sw["gate"],
-                    "guard":      sw["guard"],
-                    "assignment": sw.get("assignment", []),
+                    "id":          sw_id,
+                    "source":      sw["init_loc"],
+                    "target":      sw["end_loc"],
+                    "label":       sw_id,
+                    "switchId":    sw_id,
+                    "gateId":      sw["gate"],
+                    "guard":       sw["guard"],
+                    "assignments": [assignment_index[aid] for aid in sw.get("assignments", [])],
                 },
             })
 
@@ -224,11 +223,11 @@ class STSExporter:
             )
 
         guard_rows: list[str] = []
-        for gid, expr in self._guard_index.items():
+        for gid, node in self._guard_index.items():
             guard_rows.append(
                 f'<div class="legend-entry">'
                 f'<span class="legend-id">{_he(gid)}</span>'
-                f'<span class="legend-val">{_he(expr)}</span>'
+                f'<span class="legend-val">{_he(render_guard_expr(node))}</span>'
                 f'</div>'
             )
 

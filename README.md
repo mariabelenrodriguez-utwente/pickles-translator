@@ -1,4 +1,4 @@
-# pickles-transducer
+# pickles-translator
 
 A (structured) natural language specification transducer that converts specifications in Pickles syntax into Symbolic Transition System (STS) JSON, with composition and visualization output.
 

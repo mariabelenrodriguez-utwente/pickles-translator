@@ -1,0 +1,98 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "test_cases.schema.json",
+    "title": "Test Cases Array",
+    "description": "Array of concrete test cases for a composed STS. Each test case specifies an initial system state and an ordered sequence of switch firings that define a complete execution path through the STS. Consumed by the pickles-translator to generate natural-language test descriptions.",
+    "type": "array",
+    "minItems": 1,
+    "items": {
+        "$ref": "#/$defs/testCase"
+    },
+    "$defs": {
+        "structValue": {
+            "title": "Struct Value",
+            "description": "A concrete instance of a structured variable: an object whose keys are attribute names and values are scalar primitives.",
+            "type": "object",
+            "additionalProperties": {
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "number"},
+                    {"type": "boolean"}
+                ]
+            }
+        },
+        "variableValue": {
+            "title": "Variable Value",
+            "description": "A concrete value for a single location variable. Primitive variables are represented directly as a string, number, or boolean. Array variables are represented as a JSON array whose elements are either primitive values or struct objects; the array length must not exceed the variable's maximum cardinality as declared in the STS.",
+            "oneOf": [
+                {
+                    "description": "String variable value (e.g. 'AV', 'PART AV', 'NOT AV').",
+                    "type": "string"
+                },
+                {
+                    "description": "Numeric variable value. Used for both 'integer' and 'decimal' variable types.",
+                    "type": "number"
+                },
+                {
+                    "description": "Boolean variable value.",
+                    "type": "boolean"
+                },
+                {
+                    "description": "Array variable value. Elements are either primitives or struct objects with attribute key-value pairs.",
+                    "type": "array",
+                    "items": {
+                        "oneOf": [
+                            {"type": "string"},
+                            {"type": "number"},
+                            {"type": "boolean"},
+                            {"$ref": "#/$defs/structValue"}
+                        ]
+                    }
+                }
+            ]
+        },
+        "step": {
+            "title": "Test Step",
+            "description": "A single transition in the test execution: fires a named switch in the STS and supplies concrete values for any parameters communicated by the switch's gate action.",
+            "type": "object",
+            "required": ["switch_id", "values"],
+            "additionalProperties": false,
+            "properties": {
+                "switch_id": {
+                    "description": "ID of the switch to fire, matching a key in the target STS 'switches' map (e.g. 'r_5'). The switch must be fireable from the current location: its 'init_loc' must equal the location reached after the previous step (or 'initial_location' for the first step).",
+                    "type": "string",
+                    "pattern": "^r_\\d+$"
+                },
+                "values": {
+                    "description": "Concrete parameter values for the switch's gate action. Keys are parameter IDs from the STS 'parameters' map; values conform to the parameter's declared type and range. Must supply exactly the parameters listed in the gate action's 'parameters' array. Use an empty object when the action has no parameters.",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/variableValue"}
+                }
+            }
+        },
+        "testCase": {
+            "title": "Test Case",
+            "description": "A complete test case: an initial system state and a sequence of switch firings forming an execution path through the STS. A test case is valid when each step's switch is fireable (guard holds given the current variable values) and the parameter values satisfy the declared ranges.",
+            "type": "object",
+            "required": ["initial_location", "initial_values", "steps"],
+            "additionalProperties": false,
+            "properties": {
+                "initial_location": {
+                    "description": "Starting location in the target STS. For tests targeting the composed STS this is always 'L0_comp'. Must match a value in the STS 'locations' array.",
+                    "type": "string"
+                },
+                "initial_values": {
+                    "description": "Initial concrete state of all location variables at the starting location. Keys are base variable names as declared in the Gherkin specification (e.g. 'faulty-detectors', 'availability'). Array variables are provided as JSON arrays of struct or primitive elements; their length must not exceed the maximum cardinality from the spec. Note: keys here use the non-expanded base name, unlike the 'locationVariables' map in the STS which uses expanded keys like 'faulty-detectors[0].lane'.",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/variableValue"}
+                },
+                "steps": {
+                    "description": "Ordered sequence of switch firings. Each step advances the current location from the switch's 'init_loc' to its 'end_loc'. The steps must form a valid path: consecutive steps must connect (step N's switch end_loc == step N+1's switch init_loc).",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"$ref": "#/$defs/step"}
+                }
+            }
+        }
+    }
+}

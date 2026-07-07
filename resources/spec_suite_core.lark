@@ -21,7 +21,7 @@ then:  THEN  step andstep*
 
 andstep: AND_STEP step
 
-step: steptext (((QUOTE varid QUOTE COMMA?)+ SUCHTHAT guardblock) | ((QUOTE varid QUOTE) op expvalue))? // If there is a single primitive variable, add syntactic sugar to allow guards without "such that"
+step: steptext (((QUOTE varid QUOTE COMMA?)+ SUCHTHAT guardblock) | (varref op expvalue))? // If there is a single primitive variable, add syntactic sugar to allow guards without "such that"
 steptext: /[A-Za-z0-9][A-Za-z0-9 \t]*/
 
 typedesc: primitive | array | struct
@@ -40,7 +40,7 @@ struct: IS_A_STRUCTURE_WITH_ATTRIBUTES QUOTE attrid QUOTE (COMMA QUOTE attrid QU
 
 attrdesc: QUOTE attrid QUOTE typedesc
 
-guardblock: QUOTE varid QUOTE guard (CONJOP QUOTE varid QUOTE guard)*
+guardblock: varref guard (CONJOP varref guard)*
 
 guard: primguard | arrayguard | structguard
 

@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-IMAGE_NAME := pickles-transducer
+IMAGE_NAME := pickles-translator
 VERSION_FILE := VERSION
 
 .PHONY: build-patch build-minor build-major execute-sts translate-tests sts-dot-to-png

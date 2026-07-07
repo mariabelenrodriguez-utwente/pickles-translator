@@ -1,4 +1,3 @@
-import re
 from typing import Any
 
 _OP_TEXT: dict[str, str] = {
@@ -16,88 +15,55 @@ _CONJ_TEXT: dict[str, str] = {
 }
 
 
-def _expand_guard(guard_str: str, guard_idx: dict[str, str]) -> str:
-    """Expand guard IDs (e.g. 'G1 && G2') to their full expressions.
+def _split_top_level(node: Any) -> list[tuple[str | None, Any]]:
+    """Flatten a guard tree's top-level &&/|| chain into (conj, clause) pairs.
 
     Args:
-        guard_str: Guard reference string from a switch.
-        guard_idx: Mapping of guard ID to expression.
+        node: Guard tree/leaf, as built by transformer.py's _serialize_guard.
 
     Returns:
-        Parenthesised conjunction of the referenced expressions.
+        List of (conjunction_op_or_None, clause_node) pairs, left to right.
     """
-    parts = [guard_idx[gid] for gid in re.findall(r'G\d+', guard_str) if gid in guard_idx]
-    return ' && '.join(f'({p})' for p in parts)
+    if isinstance(node, dict) and node.get('op') in ('&&', '||'):
+        parts = _split_top_level(node['lhs'])
+        last_conj, last_clause = parts[-1]
+        parts[-1] = (last_conj, last_clause)
+        parts.append((node['op'], node['rhs']))
+        return parts
+    return [(None, node)]
 
 
-def _split_top_level(expr: str) -> list[tuple[str | None, str]]:
-    """Split a guard expression on top-level && / || operators.
+def _render_clause(clause: Any, shortened: bool = False) -> str:
+    """Render a single comparison clause node as a natural language string.
 
     Args:
-        expr: Guard expression string, possibly containing nested parens.
-
-    Returns:
-        List of (conjunction_op_or_None, clause_string) pairs.
-    """
-    parts: list[tuple[str | None, str]] = []
-    depth, buf, last_op = 0, [], None
-    i = 0
-    while i < len(expr):
-        ch = expr[i]
-        if ch == '(':
-            depth += 1
-            buf.append(ch)
-        elif ch == ')':
-            depth -= 1
-            buf.append(ch)
-        elif depth == 0 and expr[i:i + 2] in ('&&', '||'):
-            parts.append((last_op, ''.join(buf).strip()))
-            last_op = expr[i:i + 2]
-            buf = []
-            i += 2
-            continue
-        else:
-            buf.append(ch)
-        i += 1
-    if buf:
-        parts.append((last_op, ''.join(buf).strip()))
-    return parts
-
-
-def _render_clause(clause: str, shortened: bool = False) -> str:
-    """Render a single comparison clause as a natural language string.
-
-    Args:
-        clause: A comparison expression like ``availability == 'PART AV'``.
+        clause: A {"lhs","op","rhs"} comparison node.
         shortened: Whether to use a shortened format.
 
     Returns:
         Natural language string, e.g. ``"availability" is equal to PART AV``.
-        Returns the raw clause on parse failure.
+        Returns the clause's string form on parse failure.
     """
-    clause = clause.strip().strip('()')
-    m = re.match(r'^([\w\-\[\]\.]+)\s*(==|!=|>=|<=|>|<)\s*(.+)$', clause.strip())
-    if not m:
-        return clause
-    var, op, value = m.group(1).strip(), m.group(2), m.group(3).strip()
-    if value.startswith("'") and value.endswith("'"):
-        value = value[1:-1]
+    if not (isinstance(clause, dict) and clause.get('op') in _OP_TEXT):
+        return str(clause)
+    var, op, value = clause['lhs'], clause['op'], clause['rhs']
     if shortened:
         return f'{_OP_TEXT[op]} {_fmt_value(value)}'
     else:
-        return f'"{_fmt_name(var)}" is {_OP_TEXT[op]} {value}'
+        return f'"{_fmt_name(var)}" is {_OP_TEXT[op]} {_fmt_value(value)}'
 
 
-def _render_guard_expr(guard_expr: str) -> tuple[str, bool]:
-    """Render a full guard expression as indented natural language lines.
+def _render_guard_expr(guard_node: Any) -> tuple[str, bool]:
+    """Render a full guard tree as indented natural language lines.
 
     Args:
-        guard_expr: Expanded guard expression string.
+        guard_node: Guard tree/leaf referenced by a switch.
 
     Returns:
-        Multi-line string with each clause indented by four spaces.
+        Tuple of (multi-line string with each clause indented by four
+        spaces, whether the guard had a single clause).
     """
-    parts = _split_top_level(guard_expr)
+    parts = _split_top_level(guard_node)
     lines = []
     single_clause = len(parts) == 1
     if len(parts) > 1:
@@ -105,7 +71,7 @@ def _render_guard_expr(guard_expr: str) -> tuple[str, bool]:
             prefix = f'{_CONJ_TEXT[conj]} ' if conj else ''
             lines.append(f'    {prefix}{_render_clause(clause)}')
     else:
-        lines.append(f'{_render_clause(guard_expr, True)}')
+        lines.append(f'{_render_clause(guard_node, True)}')
     return '\n'.join(lines), single_clause
 
 
@@ -138,10 +104,10 @@ class TestCaseTranslator:
             spec: Composed STS dict as produced by compose_stss.
         """
         self._spec        = spec
-        self._switch_idx  = spec.get('switches',      {})
-        self._input_idx   = spec.get('inputActions',  {})
-        self._output_idx  = spec.get('outputActions', {})
-        self._guard_idx   = {gid: g['expression'] for gid, g in spec.get('guards', {}).items()}
+        self._switch_idx  = spec.get('switches',  {})
+        self._input_idx   = spec.get('inputGates',  {})
+        self._output_idx  = spec.get('outputGates', {})
+        self._guard_idx   = spec.get('guards', {})
 
     def translate(self, test_cases: list[dict], output_path: str) -> str:
         """Translate test cases to natural language and write to a file.
@@ -246,12 +212,12 @@ class TestCaseTranslator:
 
         return '\n'.join(lines) if lines else f'When {text}'
 
-    def _render_output(self, gate: str, guard_str: str) -> str:
+    def _render_output(self, gate: str, guard_id: str) -> str:
         """Render an output step as a Then clause with oracle condition.
 
         Args:
             gate: Action gate ID (e.g. ``Out1``).
-            guard_str: Raw guard reference string from the switch (e.g. ``G3``).
+            guard_id: The switch's single guard ID (e.g. ``G3``).
 
         Returns:
             Natural language string starting with ``Then``.
@@ -259,9 +225,9 @@ class TestCaseTranslator:
         action     = self._output_idx.get(gate, {})
         text       = action.get('text', gate)
         params     = action.get('parameters', [])
-        guard_expr = _expand_guard(guard_str, self._guard_idx)
+        guard_expr = self._guard_idx.get(guard_id)
 
-        if not params or not guard_expr:
+        if not params or guard_expr is None:
             return f'Then {text}'
 
         param_base = _fmt_name(params[0])
