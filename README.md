@@ -66,6 +66,33 @@ dot -Tsvg output/spec_composed.dot -o output/spec_composed.svg
 dot -Tpng output/spec_composed.dot -o output/spec_composed.png
 ```
 
+## Editor support
+
+A VS Code extension for `.pickles` syntax highlighting is available in `pickles-vscode/`. It isn't published to the Marketplace, so install it manually:
+
+1. Locate your VS Code extensions folder:
+    - Linux/macOS: `~/.vscode/extensions`
+    - Windows: `%USERPROFILE%\.vscode\extensions`
+2. Copy `pickles-vscode/` into that folder, naming the copy `<publisher>.<name>-<version>` (VS Code uses this to identify the extension), e.g.:
+
+    ```bash
+    cp -r pickles-vscode ~/.vscode/extensions/pickles.pickles-syntax-0.1.0
+    ```
+
+3. Open the copy's `package.json` and add a `"publisher"` field matching the name you chose above:
+
+    ```json
+    {
+      "name": "pickles-syntax",
+      "publisher": "pickles",
+      "version": "0.1.0",
+      ...
+    }
+    ```
+
+4. Reload VS Code (Command Palette → **Developer: Reload Window**, or just restart it).
+5. Open any `.pickles` file — it should now be syntax highlighted.
+
 ## Using the exporter directly
 
 `STSExporter` can be used standalone on any STS JSON:
