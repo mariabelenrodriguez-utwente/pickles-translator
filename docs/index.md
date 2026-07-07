@@ -10,9 +10,9 @@ See also:
 Create a virtual environment for Python (recommended) and install dependencies.
 
 ```bash
-conda create --name picklestransd python=3.10
-conda activate picklestransd
-pip install -r requirements.txt
+conda create --name pickles python=3.10
+conda activate pickles
+pip install -r requirements.pickles
 ```
 
 ## Quickstart
@@ -21,7 +21,7 @@ pip install -r requirements.txt
 2. Generate the model:
 
     ```bash
-    conda activate picklestransd
+    conda activate pickles
 
     # process every .pickles file in input_files/
     python pickles_transducer.py sts

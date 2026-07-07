@@ -5,9 +5,9 @@ A (structured) natural language specification transducer that converts specifica
 ## Setup
 
 ```bash
-conda create --name picklestransd python=3.10
-conda activate picklestransd
-pip install -r requirements.txt
+conda create --name pickles python=3.10
+conda activate pickles
+pip install -r requirements.pickles
 ```
 
 ## Running
@@ -17,13 +17,13 @@ The tool has two subcommands.
 **Generate STS** — process spec files and write STS JSON + visualization:
 
 ```bash
-conda activate picklestransd
+conda activate pickles
 
-# All .txt files in input_files/
+# All .pickles files in input_files/
 python pickles_transducer.py sts
 
 # Single spec file
-python pickles_transducer.py sts --spec path/to/spec.txt
+python pickles_transducer.py sts --spec path/to/spec.pickles
 ```
 
 For each input file, the following outputs are written to `output/`:
@@ -95,14 +95,14 @@ docker load --input pickles_translator.tar.gz
 ```
 
 ### Generate master model from Pickles specifications
-File `spec_examples/detectors_spec.txt` contains the Pickles specification presented in Listing 1 in the paper. To get the master model, execute:
+File `spec_examples/detectors_spec.pickles` contains the Pickles specification presented in Listing 1 in the paper. To get the master model, execute:
 ```
-make execute-sts SPEC=spec_examples/detectors_spec.txt
+make execute-sts SPEC=spec_examples/detectors_spec.pickles
 ```
 This command should take a couple of seconds. Expected console output:
 ```
 ============================================================
-Processing: detectors_spec.txt  (4 scenario(s))
+Processing: detectors_spec.pickles  (4 scenario(s))
 ============================================================
   [partial STSs]  -> output/[TIMESTAMP]_detectors_spec.json
   [composed STS]  -> output/[TIMESTAMP]_detectors_spec_composed.json
@@ -130,4 +130,4 @@ This will generate the Pickles translation of the test cases defined in the json
 ```
 make translate-tests STS=./path/to/sts.json TESTS=./test_examples/detectors_tests.json
 ```
-In both cases, the file `[TIMESTAMP]_[STS_FILENAME]_test_cases_pickles.txt` with the test cases in Pickles syntax. Test Case 1 corresponds to the test case introduced in Listing 2 in the paper.
+In both cases, the file `[TIMESTAMP]_[STS_FILENAME]_test_cases.pickles` with the test cases in Pickles syntax. Test Case 1 corresponds to the test case introduced in Listing 2 in the paper.

@@ -114,7 +114,7 @@ class TestCaseTranslator:
 
         Args:
             test_cases: List of test case dicts from TestGenerator.
-            output_path: Destination path for the .txt file.
+            output_path: Destination path for the .pickles file.
 
         Returns:
             The full natural language text that was written to disk.
