@@ -357,7 +357,7 @@ class TestComposedSchemaInvalid:
 
     def test_additional_property_rejected(self) -> None:
         comp = _composed_sts(1)
-        comp["source_files"] = ["spec.txt"]
+        comp["source_files"] = ["spec.pickles"]
         with pytest.raises(ValidationError):
             validate(comp, COMPOSED_SCHEMA)
 

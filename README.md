@@ -5,9 +5,9 @@ A (structured) natural language specification transducer that converts specifica
 ## Setup
 
 ```bash
-conda create --name picklestransd python=3.10
-conda activate picklestransd
-pip install -r requirements.txt
+conda create --name pickles python=3.10
+conda activate pickles
+pip install -r requirements.pickles
 ```
 
 ## Running
@@ -17,13 +17,13 @@ The tool has two subcommands.
 **Generate STS** — process spec files and write STS JSON + visualization:
 
 ```bash
-conda activate picklestransd
+conda activate pickles
 
-# All .txt files in input_files/
+# All .pickles files in input_files/
 python pickles_transducer.py sts
 
 # Single spec file
-python pickles_transducer.py sts --spec path/to/spec.txt
+python pickles_transducer.py sts --spec path/to/spec.pickles
 ```
 
 For each input file, the following outputs are written to `output/`:
@@ -66,6 +66,33 @@ dot -Tsvg output/spec_composed.dot -o output/spec_composed.svg
 dot -Tpng output/spec_composed.dot -o output/spec_composed.png
 ```
 
+## Editor support
+
+A VS Code extension for `.pickles` syntax highlighting is available in `pickles-vscode/`. It isn't published to the Marketplace, so install it manually:
+
+1. Locate your VS Code extensions folder:
+    - Linux/macOS: `~/.vscode/extensions`
+    - Windows: `%USERPROFILE%\.vscode\extensions`
+2. Copy `pickles-vscode/` into that folder, naming the copy `<publisher>.<name>-<version>` (VS Code uses this to identify the extension), e.g.:
+
+    ```bash
+    cp -r pickles-vscode ~/.vscode/extensions/pickles.pickles-syntax-0.1.0
+    ```
+
+3. Open the copy's `package.json` and add a `"publisher"` field matching the name you chose above:
+
+    ```json
+    {
+      "name": "pickles-syntax",
+      "publisher": "pickles",
+      "version": "0.1.0",
+      ...
+    }
+    ```
+
+4. Reload VS Code (Command Palette → **Developer: Reload Window**, or just restart it).
+5. Open any `.pickles` file — it should now be syntax highlighted.
+
 ## Using the exporter directly
 
 `STSExporter` can be used standalone on any STS JSON:
@@ -95,14 +122,14 @@ docker load --input pickles_translator.tar.gz
 ```
 
 ### Generate master model from Pickles specifications
-File `spec_examples/detectors_spec.txt` contains the Pickles specification presented in Listing 1 in the paper. To get the master model, execute:
+File `spec_examples/detectors_spec.pickles` contains the Pickles specification presented in Listing 1 in the paper. To get the master model, execute:
 ```
-make execute-sts SPEC=spec_examples/detectors_spec.txt
+make execute-sts SPEC=spec_examples/detectors_spec.pickles
 ```
 This command should take a couple of seconds. Expected console output:
 ```
 ============================================================
-Processing: detectors_spec.txt  (4 scenario(s))
+Processing: detectors_spec.pickles  (4 scenario(s))
 ============================================================
   [partial STSs]  -> output/[TIMESTAMP]_detectors_spec.json
   [composed STS]  -> output/[TIMESTAMP]_detectors_spec_composed.json
@@ -130,4 +157,4 @@ This will generate the Pickles translation of the test cases defined in the json
 ```
 make translate-tests STS=./path/to/sts.json TESTS=./test_examples/detectors_tests.json
 ```
-In both cases, the file `[TIMESTAMP]_[STS_FILENAME]_test_cases_pickles.txt` with the test cases in Pickles syntax. Test Case 1 corresponds to the test case introduced in Listing 2 in the paper.
+In both cases, the file `[TIMESTAMP]_[STS_FILENAME]_test_cases.pickles` with the test cases in Pickles syntax. Test Case 1 corresponds to the test case introduced in Listing 2 in the paper.

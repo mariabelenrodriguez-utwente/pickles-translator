@@ -9,7 +9,7 @@ from src.exporter import STSExporter
 from src.tc_translator import TestCaseTranslator
 
 def cmd_generate_sts(args: argparse.Namespace) -> None:
-    """Process .txt spec(s) and write STS JSON + exports."""
+    """Process .pickles spec(s) and write STS JSON + exports."""
     pickles = PicklesToSTS()
     parser  = pickles.load_parser(lang="en")
     sts_id  = 1
@@ -19,7 +19,7 @@ def cmd_generate_sts(args: argparse.Namespace) -> None:
         spec_files = [
             f"input_files/{fn}"
             for fn in sorted(os.listdir("input_files"))
-            if fn.endswith(".txt")
+            if fn.endswith(".pickles")
         ]
     for filepath in spec_files:
         filename = os.path.basename(filepath)
@@ -69,7 +69,7 @@ def cmd_translate_tests(args: argparse.Namespace) -> None:
 
     ts       = datetime.now().strftime("%Y%m%dT%H%M%S")
     basename = os.path.splitext(os.path.basename(args.sts))[0]
-    nl_path  = f"output/{ts}_{basename}_test_cases_pickles.txt"
+    nl_path  = f"output/{ts}_{basename}_test_cases.pickles"
 
     translator = TestCaseTranslator(composed)
     translator.translate(test_cases, nl_path)
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Pickles transducer")
     sub = ap.add_subparsers(dest="command", required=True)
 
-    p_sts = sub.add_parser("sts", help="Generate STS from .txt spec(s)")
+    p_sts = sub.add_parser("sts", help="Generate STS from .pickles spec(s)")
     p_sts.add_argument("--spec", default=None, metavar="SPEC_TXT",
                        help="Path to a single spec file (default: all files in input_files/)")
 

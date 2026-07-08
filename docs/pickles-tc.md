@@ -33,7 +33,7 @@ Test cases are a JSON array, one object per test case. The expected format is in
 python pickles_transducer.py tests --sts output/<name>_composed.json --tests path/to/test_cases.json
 ```
 
-This writes `output/<timestamp>_<name>_test_cases_pickles.txt`, e.g.:
+This writes `output/<timestamp>_<name>_test_cases.pickles`, e.g.:
 
 ```
 Test Case 1:
