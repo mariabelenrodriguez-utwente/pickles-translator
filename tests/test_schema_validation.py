@@ -158,17 +158,17 @@ class TestPartialSchemaValid:
         sts["parameters"]["count_p"]      = _vardef("integer", [0, 1, 2])
         validate([sts], PARTIAL_SCHEMA)
 
-    def test_decimal_variable(self) -> None:
+    def test_float_variable(self) -> None:
         sts = _partial_sts(1)
-        sts["locationVariables"]["ratio"] = _vardef("decimal", [0.0, 0.5, 1.0])
-        sts["parameters"]["ratio_p"]      = _vardef("decimal", [0.0, 0.5, 1.0])
+        sts["locationVariables"]["ratio"] = _vardef("float", [0.0, 0.5, 1.0])
+        sts["parameters"]["ratio_p"]      = _vardef("float", [0.0, 0.5, 1.0])
         validate([sts], PARTIAL_SCHEMA)
 
     def test_struct_expanded_keys(self) -> None:
         """Array-of-struct variables are stored as expanded keys like 'arr[0].attr'."""
         sts = _partial_sts(1)
         sts["locationVariables"]["det[0].lane"]   = _vardef("integer", [1, 2, 3])
-        sts["locationVariables"]["det[0].length"] = _vardef("decimal", [1.0, 3.0])
+        sts["locationVariables"]["det[0].length"] = _vardef("float", [1.0, 3.0])
         validate([sts], PARTIAL_SCHEMA)
 
     def test_struct_attribute_in_attributes_map(self) -> None:
@@ -295,7 +295,7 @@ class TestComposedSchemaValid:
     def test_struct_expanded_location_variables(self) -> None:
         comp = _composed_sts(1)
         comp["locationVariables"]["det[0].lane"]   = _vardef("integer", [1, 2])
-        comp["locationVariables"]["det[0].length"] = _vardef("decimal", [1.0, 3.0])
+        comp["locationVariables"]["det[0].length"] = _vardef("float", [1.0, 3.0])
         validate(comp, COMPOSED_SCHEMA)
 
     def test_compound_location_name(self) -> None:
