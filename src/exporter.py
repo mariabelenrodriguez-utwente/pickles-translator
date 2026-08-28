@@ -45,10 +45,8 @@ class STSExporter:
     are available in the DOT legend cluster and the HTML side panel.
 
     Args:
-        sts: An STS dict as produced by _scenario_to_sts or
-            compose_stss. Must contain at minimum the keys
-            id, description, locations, switches,
-            guards, inputGates, and outputGates.
+        sts: A single STS dict. Must contain at minimum the keys id, description,
+            locations, switches, guards, inputGates, and outputGates.
     """
 
     def __init__(self, sts: dict[str, Any]) -> None:
