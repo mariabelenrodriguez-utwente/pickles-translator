@@ -1,10 +1,26 @@
 import argparse
 from datetime import datetime
 import json
+import logging
 import os
 
 from src.transformer import PicklesToSTS
 from src.tc_translator import TestCaseTranslator
+
+ts       = datetime.now().strftime("%Y%m%dT%H%M%S")
+LOG_PATH = f"output/pickles_{ts}.log"
+
+def _configure_logging() -> None:
+    """Route logs to a file"""
+    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+    logging.basicConfig(
+        filename=LOG_PATH,
+        filemode="a",
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
 
 def cmd_generate_sts(args: argparse.Namespace) -> None:
     """Process .pickles spec(s) and write a JSON array of STS definitions."""
@@ -48,7 +64,6 @@ def cmd_translate_tests(args: argparse.Namespace) -> None:
     with open(args.tests) as f:
         test_cases = json.load(f)
 
-    ts       = datetime.now().strftime("%Y%m%dT%H%M%S")
     basename = os.path.splitext(os.path.basename(args.sts))[0]
     nl_path  = f"output/{ts}_{basename}_test_cases.pickles"
 
@@ -70,6 +85,7 @@ if __name__ == "__main__":
     p_tests.add_argument("--tests", required=True, metavar="TESTS_JSON", help="Path to test cases JSON")
 
     args = ap.parse_args()
+    _configure_logging()
     if args.command == "sts":
         cmd_generate_sts(args)
     else:
