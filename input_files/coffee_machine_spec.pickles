@@ -1,0 +1,30 @@
+Variable Settings
+"water level" is an integer with range [0,100]
+"coffee beans level" is an integer with range [0,100]
+"machine status" is a string with range {READY, BREWING, ERROR} and initial value 'READY'
+
+Scenario 01: brewing starts when sufficient resources are available
+Given the system is in its initial state
+And the user interface displays information on "machine status" equal to 'READY'
+When the user issues a brew request
+And the machine has a current "water level", "coffee beans level" such that:
+    "water level" is greater than 20 AND
+    "coffee beans level" is greater than 10
+Then the user interface displays "machine status" equal to 'BREWING'
+And the machine serves coffee
+And the user interface displays "machine status" equal to 'READY'
+
+Scenario 02: brewing fails when the water level is too low
+Given the system is in its initial state
+And the user interface displays information on "machine status" equal to 'READY'
+When the user issues a brew request
+And the machine has a current "water level", "coffee beans level" such that:
+    "water level" is lower or equal than 20 OR
+    "coffee beans level" is lower or equal than 10
+Then the user interface displays "machine status" equal to 'ERROR'
+
+Scenario 03: brewing error recovery
+Given the user interface displays information on "machine status" equal to 'ERROR'
+When the user does a manual reset
+Then the user interface displays "machine status" equal to 'READY'
+
