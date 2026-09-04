@@ -1,4 +1,5 @@
 SCENARIO: "Scenario"
+DOCUMENTATION: "Documentation:"
 VARIABLE_SETTINGS: "Variable Settings"
 GIVEN: "Given "
 WHEN: "When "
@@ -9,9 +10,21 @@ SUCHTHAT: "such that:"
 INITCOND: "the system is in its initial state"
 
 ISA: "is a " | "is an "
+ISTHE: "is the "
 WITHRANGE: "with range "
+RESOLUTION: "resolution "
+AND_INITIAL_VALUE: "and initial value "
 
-ISANARRAY: "array of "
+ARRAYOF: "array of "
+UNIQUE: "unique "
+
+CONTAINS_ALL_POSSIBLE_ELEMENTS: "contains all possible elements"
+CONTAINS_ONLY: "contains only "
+CONTAINS: "contains "
+DOES_NOT_CONTAIN: "does not contain "
+
+IS_EMPTY: "is empty"
+IS_NOT_EMPTY: "is not empty"
 
 IS_A_STRUCTURE_WITH_ATTRIBUTES: "is a structure with attributes "
 
@@ -22,10 +35,21 @@ ELEMENTS_WHERE_EACH_ELEMENT: "elements where each element "
 BOOLEAN_TYPE: "boolean"
 STRING_TYPE: "string"
 INTEGER_TYPE: "integer"
-DECIMAL_TYPE: "decimal"
+DECIMAL_TYPE: "float"
+
+BOOLEAN_TYPE_PL: "booleans"
+STRING_TYPE_PL: "strings"
+INTEGER_TYPE_PL: "integers"
+DECIMAL_TYPE_PL: "floats"
 
 HAS: "has"
 IS: "is"
+
+IN: "in " | "is in "
+NOT_IN: "not in " | "is not in "
+
+LENGTH: "length "
+SUBSET_OF: "subset of "
 
 EQUAL_TO: "equal to "
 NOT_EQUAL_TO: "not equal to "

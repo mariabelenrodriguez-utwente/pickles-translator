@@ -1,33 +1,60 @@
 // tokens_es.lark
 
-VARIABLE_SETTINGS: "Configuración de Variables"
 SCENARIO: "Escenario"
+DOCUMENTATION: "Documentación:"
+VARIABLE_SETTINGS: "Configuración de Variables"
 GIVEN: "Dado"
 WHEN: "Cuando"
 THEN: "Entonces"
+AND_STEP: "Y "
 
-SUCHTHAT: "tal que: "
-INITCOND: "El sistema está en su estado inicial"
+SUCHTHAT: "tal que:"
+INITCOND: "el sistema está en su estado inicial"
 
 ISA: "es un " | "es una "
-WITHRANGE: " y rango "
+ISTHE: "es el " | "es la "
+WITHRANGE: "con rango "
+RESOLUTION: "resolución "
+AND_INITIAL_VALUE: "y valor inicial "
 
-ISANARRAY: " es un arreglo de "
-ELEMENTSSUCHTHAT: " elementos tal que cada elemento "
+ARRAYOF: "arreglo de "
+UNIQUE: "único "
+
+CONTAINS_ALL_POSSIBLE_ELEMENTS: "contiene todos los elementos posibles"
+CONTAINS_ONLY: "contiene solo "
+CONTAINS: "contiene "
+DOES_NOT_CONTAIN: "no contiene "
+
+IS_EMPTY: "está vacío" | "está vacía"
+IS_NOT_EMPTY: "no está vacío" | "no está vacía"
 
 IS_A_STRUCTURE_WITH_ATTRIBUTES: "es una estructura con atributos "
 
-HAS: "tiene "
-HAS_ATTRIBUTES_SUCH_THAT: "tiene atributos tales que: "
+HAS_ATTRIBUTES_SUCH_THAT: "tiene atributos tales que:"
 
-ELEMENTS_WHERE_EACH_ELEMENT: " elementos donde cada elemento "
+ELEMENTS_WHERE_EACH_ELEMENT: "elementos donde cada elemento "
 
 BOOLEAN_TYPE: "booleano"
 STRING_TYPE: "cadena"
 INTEGER_TYPE: "entero"
-DECIMAL_TYPE: "decimal"
+DECIMAL_TYPE: "float"
+
+BOOLEAN_TYPE_PL: "booleanos"
+STRING_TYPE_PL: "cadenas"
+INTEGER_TYPE_PL: "enteros"
+DECIMAL_TYPE_PL: "floates"
+
+HAS: "tiene"
+IS: "es"
+
+IN: "en " | "está en "
+NOT_IN: "no en " | "no está en "
+
+LENGTH: "longitud "
+SUBSET_OF: "subconjunto de "
 
 EQUAL_TO: "igual a "
+NOT_EQUAL_TO: "distinto a "
 GREATER_THAN: "mayor que "
 LOWER_THAN: "menor que "
 GREATER_OR_EQUAL_THAN: "mayor o igual que "
@@ -36,10 +63,9 @@ LOWER_OR_EQUAL_THAN: "menor o igual que "
 AT_LEAST: "al menos "
 AT_MOST: "como máximo "
 EXACTLY: "exactamente "
+ALL: "todos "
 BETWEEN: "entre "
-AND: " y "
-
-AND_STEP: "Y "
+AND: "y "
 
 BOOL_LIT: "verdadero" | "falso"
 

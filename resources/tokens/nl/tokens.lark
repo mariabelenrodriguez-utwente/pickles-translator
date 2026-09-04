@@ -1,5 +1,6 @@
 VARIABLE_SETTINGS: "Variabeleninstelling"
 SCENARIO: "Scenario"
+DOCUMENTATION: "Documentatie:"
 GIVEN: "Gegeven"
 WHEN: "Wanneer"
 THEN: "Dan"
@@ -8,24 +9,49 @@ SUCHTHAT: "zodanig dat: "
 INITCOND: "Het systeem is in de beginstatus"
 
 ISA: "is een "
-WITHRANGE: " en bereik "
+ISTHE: "is de "
+IS: "is"
 
-ISANARRAY: " is een array van "
+IN: "in " | "is in "
+NOT_IN: "niet in " | "is niet in "
+
+LENGTH: "lengte "
+SUBSET_OF: "subset van "
+WITHRANGE: "en bereik "
+RESOLUTION: "resolutie "
+AND_INITIAL_VALUE: "en initiële waarde "
+
+ARRAYOF: "array van "
+UNIQUE: "unieke "
 ELEMENTSSUCHTHAT: " elementen zodanig dat elk element "
+
+CONTAINS_ALL_POSSIBLE_ELEMENTS: "bevat alle mogelijke elementen"
+CONTAINS_ONLY: "bevat alleen "
+CONTAINS: "bevat "
+DOES_NOT_CONTAIN: "bevat niet "
+
+IS_EMPTY: "is leeg"
+IS_NOT_EMPTY: "is niet leeg"
 
 IS_A_STRUCTURE_WITH_ATTRIBUTES: "is een structuur met attributen "
 
 HAS: "heeft "
 HAS_ATTRIBUTES_SUCH_THAT: "heeft attributen zodanig dat: "
 
-ELEMENTS_WHERE_EACH_ELEMENT: " elementen waarbij elk element "
+ELEMENTS_WHERE_EACH_ELEMENT: "elementen waarbij elk element "
 
 BOOLEAN_TYPE: "booleaan"
 STRING_TYPE: "tekenreeks"
 INTEGER_TYPE: "geheel getal"
 DECIMAL_TYPE: "decimaal"
 
+BOOLEAN_TYPE_PL: "booleanen"
+STRING_TYPE_PL: "tekenreeksen"
+INTEGER_TYPE_PL: "gehele getallen"
+DECIMAL_TYPE_PL: "floaten"
+
 EQUAL_TO: "gelijk aan "
+NOT_EQUAL_TO: "niet gelijk aan "
 GREATER_THAN: "groter dan "
 LOWER_THAN: "kleiner dan "
 GREATER_OR_EQUAL_THAN: "groter of gelijk aan "
@@ -34,8 +60,9 @@ LOWER_OR_EQUAL_THAN: "kleiner of gelijk aan "
 AT_LEAST: "ten minste "
 AT_MOST: "hoogstens "
 EXACTLY: "exact "
+ALL: "alle "
 BETWEEN: "tussen "
-AND: " en "
+AND: "en "
 
 AND_STEP: "En "
 

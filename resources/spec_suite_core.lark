@@ -1,4 +1,4 @@
-%import .tokens (VARIABLE_SETTINGS,SCENARIO,GIVEN,WHEN,THEN,AND_STEP,SUCHTHAT,INITCOND,ISA,IS,WITHRANGE,ISANARRAY,IS_A_STRUCTURE_WITH_ATTRIBUTES,HAS,HAS_ATTRIBUTES_SUCH_THAT,ELEMENTS_WHERE_EACH_ELEMENT,BOOLEAN_TYPE,STRING_TYPE,INTEGER_TYPE,DECIMAL_TYPE,EQUAL_TO,NOT_EQUAL_TO,GREATER_THAN,LOWER_THAN,GREATER_OR_EQUAL_THAN,LOWER_OR_EQUAL_THAN,AT_LEAST,AT_MOST,EXACTLY,ALL,BETWEEN,AND,STORED,CONJOP,QUOTE,COMMA,BOOL_LIT)
+%import .tokens (VARIABLE_SETTINGS,SCENARIO,GIVEN,WHEN,THEN,AND_STEP,SUCHTHAT,INITCOND,ISA,ISTHE,IS,WITHRANGE,RESOLUTION,ARRAYOF,UNIQUE,IS_A_STRUCTURE_WITH_ATTRIBUTES,HAS,HAS_ATTRIBUTES_SUCH_THAT,ELEMENTS_WHERE_EACH_ELEMENT,BOOLEAN_TYPE,STRING_TYPE,INTEGER_TYPE,DECIMAL_TYPE,EQUAL_TO,NOT_EQUAL_TO,GREATER_THAN,LOWER_THAN,GREATER_OR_EQUAL_THAN,LOWER_OR_EQUAL_THAN,AT_LEAST,AT_MOST,EXACTLY,ALL,BETWEEN,AND,STORED,CONJOP,QUOTE,COMMA,BOOL_LIT,CONTAINS,DOES_NOT_CONTAIN,CONTAINS_ONLY,CONTAINS_ALL_POSSIBLE_ELEMENTS,IS_EMPTY,IS_NOT_EMPTY,BOOLEAN_TYPE_PL,STRING_TYPE_PL,INTEGER_TYPE_PL,DECIMAL_TYPE_PL,DOCUMENTATION,IN,NOT_IN,LENGTH,SUBSET_OF,AND_INITIAL_VALUE)
 %import common.ESCAPED_STRING   -> STRING
 %import common.SIGNED_NUMBER
 UNSIGNED_NUMBER: /[0-9]+(\.[0-9]+)?/
@@ -9,11 +9,23 @@ STRUCT_END: "<endstruct>"
 
 specsuite: vardefblock scenario+
 
-vardefblock: VARIABLE_SETTINGS vardef+
+vardefblock: VARIABLE_SETTINGS (vardef | constdef)+
 
-vardef: QUOTE varid QUOTE typedesc
+vardef: QUOTE varid QUOTE typedesc initval?
 
-scenario: SCENARIO scenariodescription? given? when then
+initval: AND_INITIAL_VALUE ((UNSIGNED_NUMBER | SIGNED_NUMBER | STR_LIT | BOOL_LIT) | range)
+
+constdef: QUOTE varid QUOTE constdesc
+
+constdesc: primconst | arrayconst
+
+primconst: ISTHE primtype (UNSIGNED_NUMBER | SIGNED_NUMBER | STR_LIT | BOOL_LIT)
+
+arrayconst: ISTHE ARRAYOF UNIQUE primtype_pl range
+
+scenario: SCENARIO scenariodescription? documentation? given? when then
+
+documentation: DOCUMENTATION /[^\n]+/
 
 given: GIVEN (INITCOND | step) andstep*
 when:  WHEN  step andstep*
@@ -21,30 +33,58 @@ then:  THEN  step andstep*
 
 andstep: AND_STEP step
 
-step: steptext (((QUOTE varid QUOTE COMMA?)+ SUCHTHAT guardblock) | (varref op expvalue))? // If there is a single primitive variable, add syntactic sugar to allow guards without "such that"
-steptext: /[A-Za-z0-9][A-Za-z0-9 \t]*/
+step: steptext (((QUOTE varid QUOTE COMMA?)+ SUCHTHAT guardblock) | (varref op expvalue) | (varref containsop expvalue) | (varref containsallop) | (varref inop set_expr) | (varref emptyop) | attrboolstep | varref)? // If there is a single primitive variable, add syntactic sugar to allow guards without "such that"; a bare varref is boolean sugar for "is equal to true" (or false, if steptext ends in a negation word)
+
+attrboolstep: varref IS varref        -> attrboolstep_true
+            | varref IS "not" varref  -> attrboolstep_false
+steptext: /[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 \t']*/
 
 typedesc: primitive | array | struct
 
-primitive: ISA primtype WITHRANGE range
+primitive: ISA primtype (WITHRANGE range (AND RESOLUTION UNSIGNED_NUMBER)?)?
 
 primtype: BOOLEAN_TYPE | STRING_TYPE | INTEGER_TYPE | DECIMAL_TYPE
 
-array: ISA ISANARRAY cardinality ELEMENTS_WHERE_EACH_ELEMENT typedesc
+primtype_pl: BOOLEAN_TYPE_PL | STRING_TYPE_PL | INTEGER_TYPE_PL | DECIMAL_TYPE_PL
+
+array: ISA ARRAYOF cardinality UNIQUE? ELEMENTS_WHERE_EACH_ELEMENT typedesc
 
 cardinality: AT_MOST UNSIGNED_NUMBER
            | EXACTLY UNSIGNED_NUMBER
            | BETWEEN UNSIGNED_NUMBER AND UNSIGNED_NUMBER
 
-struct: IS_A_STRUCTURE_WITH_ATTRIBUTES QUOTE attrid QUOTE (COMMA QUOTE attrid QUOTE)* SUCHTHAT attrdesc+ STRUCT_END
+struct: IS_A_STRUCTURE_WITH_ATTRIBUTES struct_body
+
+struct_body: QUOTE attrid QUOTE (COMMA QUOTE attrid QUOTE)* SUCHTHAT attrdesc+ STRUCT_END
 
 attrdesc: QUOTE attrid QUOTE typedesc
 
 guardblock: varref guard (CONJOP varref guard)*
 
-guard: primguard | arrayguard | structguard
+guard: primguard | arrayguard | structguard | containsguard | inguard | emptyguard | lengthguard
 
 primguard: IS op expvalue
+
+containsguard: containsop expvalue
+             | containsallop
+
+containsop: CONTAINS          -> contains_op
+          | DOES_NOT_CONTAIN  -> not_contains_op
+          | CONTAINS_ONLY     -> contains_only_op
+
+containsallop: CONTAINS_ALL_POSSIBLE_ELEMENTS -> contains_all_op
+
+inguard: inop set_expr
+
+inop: IN      -> in_membership
+    | NOT_IN  -> not_in_membership
+
+lengthguard: HAS LENGTH op expvalue
+
+emptyguard: emptyop
+
+emptyop: IS_EMPTY      -> is_empty_op
+       | IS_NOT_EMPTY  -> is_not_empty_op
 
 op: EQUAL_TO
   | NOT_EQUAL_TO
@@ -53,6 +93,7 @@ op: EQUAL_TO
   | GREATER_OR_EQUAL_THAN
   | LOWER_OR_EQUAL_THAN
   | BETWEEN (atom | varref) AND
+  | SUBSET_OF
 
 arrayguard: quantifier UNSIGNED_NUMBER ELEMENTS_WHERE_EACH_ELEMENT guard
            | HAS ALL ELEMENTS_WHERE_EACH_ELEMENT guard
@@ -69,19 +110,21 @@ expvalue: arithexpr
 
 varref: STORED? QUOTE varid QUOTE
 
-attrid: /[A-Za-z0-9][A-Za-z0-9 \t]*/
-varid: /[A-Za-z0-9][A-Za-z0-9 \t]*/
+attrid: /[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 \t']*/
+varid: /[A-Za-zÀ-ÖØ-öø-ÿ0-9][A-Za-zÀ-ÖØ-öø-ÿ0-9 \t']*/
 
 scenariodescription: /[^\n]+/
 
-range: "(" /[^()\[\]{}]+/ ")" | "[" /[^\[\](){}]+/ "]" | "{" /[^{}()\[\]]+/ "}"
+range: "(" /[^()\[\]{}]+/ ")" -> range_open
+     | "[" /[^\[\](){}]+/ "]" -> range_closed
+     | "{" /[^{}()\[\]]+/ "}" -> range_set
 
 ?arithexpr: arithexpr "+" arithexpr   -> add
           | arithexpr "-" arithexpr   -> sub
           | arithexpr "*" arithexpr   -> mul
           | arithexpr "/" arithexpr   -> div
-          | arithexpr "in" set_expr   -> in_op
-          | arithexpr "not" "in" set_expr -> not_in_op
+          | arithexpr IN set_expr     -> in_op
+          | arithexpr NOT_IN set_expr -> not_in_op
           | atom
           | varref
 
@@ -93,3 +136,4 @@ range: "(" /[^()\[\]{}]+/ ")" | "[" /[^\[\](){}]+/ "]" | "{" /[^{}()\[\]]+/ "}"
      | range
 
 set_expr: "{" [atom ("," atom)*] "}"
+        | varref
