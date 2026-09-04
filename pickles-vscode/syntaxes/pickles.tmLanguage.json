@@ -4,6 +4,8 @@
   "scopeName": "source.pickles",
   "fileTypes": ["pickles"],
   "patterns": [
+    { "include": "#comments" },
+    { "include": "#documentation_block" },
     { "include": "#variables" },
     { "include": "#string_literals" },
     { "include": "#control_keywords" },
@@ -15,6 +17,18 @@
     { "include": "#numbers" }
   ],
   "repository": {
+    "comments": {
+      "name": "comment.line.number-sign.pickles",
+      "match": "#.*$"
+    },
+    "documentation_block": {
+      "begin": "^Documentation:",
+      "beginCaptures": {
+        "0": { "name": "keyword.control.pickles" }
+      },
+      "end": "^(?=\\s*(Given|When|Then|And|Scenario)\\b)",
+      "contentName": "comment.block.documentation.pickles"
+    },
     "variables": {
       "name": "variable.other.pickles",
       "match": "\"[^\"]*\""
@@ -89,7 +103,7 @@
     },
     "types": {
       "name": "storage.type.pickles",
-      "match": "\\b(boolean|string|integer|decimal)\\b"
+      "match": "\\b(boolean|string|integer|float)\\b"
     },
     "operators": {
       "patterns": [
