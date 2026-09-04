@@ -8,9 +8,6 @@ from .ast_nodes import (
     GuardBlock, VarRef,
 )
 
-_CONTAINS_OPS  = {'contains', 'not_contains', 'contains_only', 'contains_all'}
-_EMPTINESS_OPS = {'is_empty', 'is_not_empty'}
-
 
 class SpecValidator:
 
@@ -129,8 +126,8 @@ class SpecValidator:
 
 
     def _check_guard_value_declared(self, guard) -> None:
-        """Any variable referenced by a guard's value (e.g. the "'y'" in
-        "'x' is equal to 'y'") must itself be a declared variable.
+        """Any variable referenced by a guard's value must itself be a 
+        declared variable.
         """
         if isinstance(guard, (PrimGuard, CollectionGuard)):
             if guard.op in ('in', 'not_in') and isinstance(guard.value, Tree):
