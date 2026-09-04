@@ -143,7 +143,8 @@ class STSExporter:
 
         # Transitions
         for sw_id, sw in sts["switches"].items():
-            tooltip = _dot_attr_escape(f'{sw_id}: {sw["gate"]} [{sw["guard"]}]')
+            guard_str = " && ".join(sw["guard"])
+            tooltip = _dot_attr_escape(f'{sw_id}: {sw["gate"]} [{guard_str}]')
             lines.append(
                 f'    "{sw["init_loc"]}" -> "{sw["end_loc"]}"'
                 f' [label="{tooltip}" id="{sw_id}" tooltip="{tooltip}"];'
