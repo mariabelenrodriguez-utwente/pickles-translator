@@ -212,7 +212,7 @@ def _serialize_value(v, rhs_as_param: bool = True, constant_ids: set = None):
         key = _format_id(v.varid)
         if constant_ids and key in constant_ids:
             return _var(key)
-        return _var(_var_or_param(key, rhs_as_param))
+        return _var(_var_or_param(key, rhs_as_param and not v.stored))
     elif type(v) in SERIALIZATION_METHODS:
         return SERIALIZATION_METHODS.get(type(v))(v)
     return _serialize_tree(v, rhs_as_param, constant_ids)
@@ -227,16 +227,16 @@ def _serialize_tree(tree, rhs_as_param: bool = True, constant_ids: set = None):
     if tree.data == 'in_op':
         l = _serialize_value(tree.children[0], rhs_as_param, constant_ids)
         r = _serialize_set_expr(tree.children[1], rhs_as_param, constant_ids)
-        return {"lhs": l, "op": "in", "rhs": r}
+        return _expand_membership(l, r)
     if tree.data == 'not_in_op':
         l = _serialize_value(tree.children[0], rhs_as_param, constant_ids)
         r = _serialize_set_expr(tree.children[1], rhs_as_param, constant_ids)
-        return {"lhs": l, "op": "not in", "rhs": r}
+        return _expand_membership(l, r, negate=True)
     return str(tree)
 
 
 def _serialize_set_expr(tree, rhs_as_param: bool = True, constant_ids: set = None):
-    """The rhs of "in"/"not in": either an inline {...} literal or a reference 
+    """The rhs of "in"/"not in": either an inline {...} literal or a reference
     to a declared array variable.
     """
     if len(tree.children) == 1 and isinstance(tree.children[0], AST.VarRef):
@@ -244,7 +244,33 @@ def _serialize_set_expr(tree, rhs_as_param: bool = True, constant_ids: set = Non
     return [_serialize_value(c, rhs_as_param, constant_ids) for c in tree.children]
 
 
-def _serialize_guard(guard, subject, subject_td, var_card=None, rhs_as_param: bool = True, card_key: str = None,
+def _expand_membership(lhs: dict, rhs, negate: bool = False) -> dict:
+    """Expand "lhs in rhs" into "lhs==v1 || lhs==v2 || ..." (or, negated,
+    "lhs!=v1 && lhs!=v2 && ...").
+
+    Falls back to a compact "in"/"not in" node when rhs isn't a literal
+    list (e.g. a reference to a declared array/set variable, whose values
+    aren't known statically and so can't be expanded).
+
+    Args:
+        lhs: guardExpr node for the compared subject.
+        rhs: Serialized rhs, from _serialize_set_expr -- a list of wrapped
+            literals, or a {"var": name} reference.
+        negate: True for "not in" (chains "!=" with "&&" instead of "==" with "||").
+
+    Returns:
+        guardExpr tree/leaf dict.
+    """
+    if not isinstance(rhs, list):
+        return {"lhs": lhs, "op": "not in" if negate else "in", "rhs": rhs}
+    op, join = ('!=', '&&') if negate else ('==', '||')
+    node = {"lhs": lhs, "op": op, "rhs": rhs[0]}
+    for v in rhs[1:]:
+        node = {"lhs": node, "op": join, "rhs": {"lhs": lhs, "op": op, "rhs": v}}
+    return node
+
+
+def _serialize_guard(guard, subject, subject_td=None, var_card=None, rhs_as_param: bool = True, card_key: str = None,
                       constant_ids: set = None, domains: dict = None, elem_depth: int = 0):
     """Build a guardExpr tree/leaf for `guard`, with `subject` as its lhs.
 
@@ -310,7 +336,7 @@ def _serialize_prim_guard(guard: "AST.PrimGuard", subject, rhs_as_param: bool, c
         }
     if guard.op in ('in', 'not_in'):
         rhs = _serialize_set_expr(guard.value, rhs_as_param, constant_ids)
-        return {"lhs": subject, "op": guard.op, "rhs": rhs}
+        return _expand_membership(subject, rhs, negate=(guard.op == 'not_in'))
     return {"lhs": subject, "op": guard.op,
             "rhs": _serialize_value(guard.value, rhs_as_param, constant_ids)}
 
@@ -348,7 +374,7 @@ def _serialize_collection_guard(guard: "AST.CollectionGuard", subject, rhs_as_pa
         checks = [{"lhs": subject, "op": "contains", "rhs": _wrap(v)} for v in values]
         return _fold(checks, "&&", True)
     if guard.op in ('is_empty', 'is_not_empty'):
-        return {"lhs": _len(subject), "op": "==" if guard.op == "empty" else "!=", "rhs": _wrap(0)}
+        return {"lhs": _len(subject), "op": "==" if guard.op == "is_empty" else "!=", "rhs": _wrap(0)}
     # 'subset' falls here
     return {"lhs": subject, "op": guard.op,
             "rhs": _serialize_value(guard.value, rhs_as_param, constant_ids)}
@@ -509,29 +535,31 @@ def render_guard_expr(node) -> str:
 
     Args:
         node: A wrapped literal leaf ({"string"|"integer"|"float"|"boolean":
-            value}), a list of such leaves/nodes, a variable reference
-            ({"var": path}), or a nested {"lhs","op","rhs"} / {"op","rhs"}
-            dict.
+            value}), a bare scalar literal (str, int, float, bool), a list
+            of such leaves/nodes, a variable reference ({"var": path}), or
+            a nested {"lhs","op","rhs"} / {"op","rhs"} dict.
 
     Returns:
         Flat expression string equivalent to the tree.
     """
     if isinstance(node, list):
         return '{' + ', '.join(render_guard_expr(n) for n in node) + '}'
+    if isinstance(node, (str, int, float, bool)):
+        return str(node)
     if 'var' in node:
         return node['var']
     for typename in ('string', 'integer', 'float', 'boolean'):
         if typename in node:
             v = node[typename]
             return str(v)
-    if node.get('op') == 'count':
+    if node.get('op') == 'cardinality':
         qtext = _QUANTIFIER_TEXT.get(node['quantifier'], node['quantifier'])
         return (f"{qtext} {node['n']} of {render_guard_expr(node['over'])} "
-                f"(as {node['element']}) match ({render_guard_expr(node['expression'])})")
+                f"(as {node['lambda']}) match ({render_guard_expr(node['expression'])})")
     if node.get('op') in ['exists', 'forall']:
-        return (f"{node.get('op')} {node['element']} in {render_guard_expr(node['over'])} "
+        return (f"{node.get('op')} {node['lambda']} in {render_guard_expr(node['over'])} "
                 f"the expression ({render_guard_expr(node['expression'])}) is satisfied.")
-    if node.get('op') == '!':
+    if node.get('op') in ('!', 'not'):
         return f"!({render_guard_expr(node['rhs'])})"
     if node.get('op') == 'len':
         return f"{render_guard_expr(node['rhs'])}.len"
@@ -560,6 +588,10 @@ def _tokens_of(children, *types):
 
 class SpecTransformer(Transformer):
 
+    def __init__(self):
+        super().__init__()
+        self._var_typedescs = {}
+
     def specsuite(self, children):
         vdb       = next(c for c in children if isinstance(c, AST.VarDefBlock))
         scenarios = [c for c in children if isinstance(c, AST.Scenario)]
@@ -567,6 +599,7 @@ class SpecTransformer(Transformer):
 
     def vardefblock(self, children):
         vardefs = [c for c in children if isinstance(c, AST.VarDef)]
+        self._var_typedescs = {vd.name: vd.typedesc for vd in vardefs}
         return AST.VarDefBlock(vardefs)
 
     def vardef(self, children):
@@ -782,9 +815,14 @@ class SpecTransformer(Transformer):
             gb = AST.GuardBlock([AST.GuardEntry(attrbool.subj.varid, pguard, stored=attrbool.subj.stored)])
             varids.append(attrbool.subj.varid.strip())
         elif sugar_ref is not None and op_result is None and exp is None and gb is None:
-            # Syntactic sugar for booleans
-            pguard = AST.PrimGuard('==', not _ends_with_negation(action or ""))
-            gb = AST.GuardBlock([AST.GuardEntry(sugar_ref.varid, pguard, stored=sugar_ref.stored)])
+            # A bare varref is boolean sugar for "is equal to true/false", but
+            # only for a boolean variable. For any other type (e.g. a struct
+            # like "drink"), a bare varref just means "unrestricted": leave
+            # gb as None so only its range/type guards apply.
+            var_td = self._var_typedescs.get(sugar_ref.varid)
+            if isinstance(var_td, AST.PrimitiveType) and var_td.primtype == 'boolean':
+                pguard = AST.PrimGuard('==', not _ends_with_negation(action or ""))
+                gb = AST.GuardBlock([AST.GuardEntry(sugar_ref.varid, pguard, stored=sugar_ref.stored)])
         return AST.Step(action or "", varids, gb)
 
     def steptext(self, children):
@@ -1513,7 +1551,7 @@ class PicklesToSTS:
         """
         if not path:
             if rng.kind == "set":
-                return {"lhs": node, "op": "in", "rhs": [_wrap(x) for x in rng.values]}
+                return _expand_membership(node, [_wrap(x) for x in rng.values])
             lo, hi = rng.values
             lo_op = ">=" if rng.kind == "closed" else ">"
             hi_op = "<=" if rng.kind == "closed" else "<"
@@ -1712,7 +1750,7 @@ class PicklesToSTS:
         counters[kind] += 1
         return gid
 
-    def _switch_guard_ref(self, guards: dict, g_idx: count, guard_ids: list,
+    def _switch_guard_ref(self, guards: dict, g_idx: count, guard_ids: list, sts_id: str,
                            extra_nodes: list = None) -> list[str]:
         """Combine a step's own guard ID(s) with auto-injected guard nodes into one switch guard ref.
 
@@ -1730,13 +1768,13 @@ class PicklesToSTS:
             guards[name] = node
             ids.append(name)
         if not ids:
-            gid = f"G{next(g_idx)}"
+            gid = f"G{next(g_idx)}_STS{sts_id:03d}"
             guards[gid] = _wrap(True)
             return [gid]
         return ids
 
     def _assignment_ids(self, assignments: dict, assign_sig_to_id: dict, a_idx: count,
-                         varids: list) -> list:
+                         varids: list, sts_id: str) -> list:
         """Look up or allocate assignment IDs for a step's variables, reusing one per (var, param) pair.
 
         Args:
@@ -1752,7 +1790,7 @@ class PicklesToSTS:
         for v in varids:
             sig = (_format_id(v), _format_id(v) + "_p")
             if sig not in assign_sig_to_id:
-                aid = f"A{next(a_idx)}"
+                aid = f"A{next(a_idx)}_STS{sts_id}"
                 assign_sig_to_id[sig] = aid
                 assignments[aid] = {"target": sig[0], "expression": _var(sig[1])}
             ids.append(assign_sig_to_id[sig])
@@ -1825,7 +1863,7 @@ class PicklesToSTS:
         if scenario.given:
             for step in scenario.given.steps:
                 if step.guardblock:
-                    gid = f"G{next(g_idx)}"
+                    gid = f"G{next(g_idx)}_STS{sts_id:03d}"
                     given_guard_ids.append(gid)
                     guards[gid] = _guardblock_to_tree(step.guardblock, var_card, as_param=False, constant_ids=constant_ids, domains=domains, type_by_name=type_by_name)
 
@@ -1836,7 +1874,7 @@ class PicklesToSTS:
         all_guard_ids = []
 
         for i, step in enumerate(when_steps + then_steps):
-            gid = f"G{next(g_idx)}"
+            gid = f"G{next(g_idx)}_STS{sts_id:03d}"
             all_guard_ids.append(gid)
             guards[gid] = _guardblock_to_tree(step.guardblock, var_card, constant_ids=constant_ids, domains=domains, type_by_name=type_by_name) if step.guardblock else _wrap(True)
             
@@ -1849,8 +1887,8 @@ class PicklesToSTS:
             _switches_list.append({
                 "init_loc":    f"L{i}_{sts_id}",
                 "gate":        self._gate_id(gate_counters, gate_ids, sts_id, in_out, step),
-                "guard":       self._switch_guard_ref(guards, g_idx, guard_ids, range_nodes),
-                "assignments": self._assignment_ids(assignments, assign_sig_to_id, a_idx, step.varids),
+                "guard":       self._switch_guard_ref(guards, g_idx, guard_ids, sts_id, range_nodes),
+                "assignments": self._assignment_ids(assignments, assign_sig_to_id, a_idx, step.varids, sts_id),
                 "end_loc":     f"L{i+1}_{sts_id}",
             })
 
