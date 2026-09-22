@@ -3,11 +3,22 @@ Visualization exporters for STS dicts.
 """
 
 import json
+import re
 from html import escape as _he
 from pathlib import Path
 from typing import Any
 
 from src.transformer import render_guard_expr
+
+_GATE_RE = re.compile(r'^([?!])"([^"]+)"\s*\[(.*)\]$')
+_LOC_OUTER_RE   = re.compile(r'^\("([^"]+)",(.*)\)$')
+_LOC_PLAIN_RE   = re.compile(r'^"([^"]*)"$')
+_LOC_PENDING_RE = re.compile(r'^pending\s+([?!]"[^"]+"\s*\[.*\])\s*->\s*"([^"]+)"$')
+
+_COMPONENT_PALETTE = [
+    "#e67e22", "#3498db", "#9b59b6", "#2ecc71",
+    "#e74c3c", "#1abc9c", "#f1c40f", "#7f8c8d",
+] # TODO: Add more colours that are distinguishable from each other
 
 def _dot_attr_escape(s: str) -> str:
     """Escape a string for use as a DOT double-quoted attribute value.
@@ -37,24 +48,162 @@ def _dot_html_escape(s: str) -> str:
          .replace('"', "&quot;")
     )
 
+
+def _render_initial_value(value: Any) -> str:
+    """Render one initialValuation entry as a display string.
+
+    Args:
+        value: A bare scalar (str, number, bool) or a guard-expr leaf/tree
+            (dict or list), as used in the STS "initialValuation" map.
+
+    Returns:
+        Flat display string for the value.
+    """
+    if isinstance(value, (dict, list)):
+        return render_guard_expr(value)
+    return str(value)
+
+
+def _split_top_level(s: str, sep: str = ",") -> list[str]:
+    """Split a string on a separator, skipping separators nested in [] or ().
+
+    Args:
+        s: String to split.
+        sep: Separator character.
+
+    Returns:
+        List of trimmed top-level chunks.
+    """
+    parts: list[str] = []
+    depth = 0
+    current: list[str] = []
+    for ch in s:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        if ch == sep and depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+        else:
+            current.append(ch)
+    parts.append("".join(current).strip())
+    return parts
+
+
+def _parse_location(loc: str) -> tuple[str, str]:
+    """Parse a "(sts_id, loc_id)" location string into its two parts.
+
+    The second element is usually a plain quoted location id (e.g.
+    '"L0_1"'), but can be a "pending" marker waiting on an output gate,
+    e.g. 'pending !"Out1" [...] -> "L2_1"'. Pending markers are
+    simplified to "pending <gate name> -> <target loc>".
+
+    Args:
+        loc: Location string, e.g. '("sts_001","L0_1")'.
+
+    Returns:
+        Tuple of (sts_id, loc_id).
+    """
+    outer = _LOC_OUTER_RE.match(loc)
+    sts_id, rest = outer.group(1), outer.group(2)
+    plain = _LOC_PLAIN_RE.match(rest)
+    if plain:
+        return sts_id, plain.group(1)
+    pending = _LOC_PENDING_RE.match(rest)
+    if pending:
+        _, gate_name, _ = _parse_gate(pending.group(1).strip())
+        return sts_id, f"pending {gate_name} -> {pending.group(2)}"
+    return sts_id, rest
+
+
+def _pretty_location(loc: str) -> str:
+    """Render a "(sts_id, loc_id)" location string as one readable line.
+
+    Args:
+        loc: Location string, e.g. '("sts_001","L0_1")'.
+
+    Returns:
+        Display string, e.g. "sts_001 / L0_1".
+    """
+    sts_id, loc_id = _parse_location(loc)
+    return f"{sts_id} / {loc_id}"
+
+
+def _component_colors(sts_ids: set[str]) -> dict[str, str]:
+    """Assign a stable color to each unique sts_id, cycling the palette.
+
+    Args:
+        sts_ids: Unique sts_ids to assign colors to.
+
+    Returns:
+        Dict mapping sts_id to a hex color string.
+    """
+    return {
+        sid: _COMPONENT_PALETTE[i % len(_COMPONENT_PALETTE)]
+        for i, sid in enumerate(sorted(sts_ids))
+    }
+
+
+def _iter_switches(switches: list) -> Any:
+    """Iterate the switches list, expanding list-valued (fan-out) slots.
+
+    Each slot is either {} (no switch, skipped), a single switch dict, or
+    a list of alternative switch dicts sharing the same slot.
+
+    Args:
+        switches: The STS "switches" list.
+
+    Yields:
+        (switch_id, switch_dict) pairs with a synthesized unique switch_id.
+    """
+    for i, slot in enumerate(switches):
+        if not slot:
+            continue
+        if isinstance(slot, list):
+            for j, sw in enumerate(slot):
+                yield f"sw_{i}_{j}", sw
+        else:
+            yield f"sw_{i}", slot
+
+
+def _parse_gate(gate_str: str) -> tuple[str, str, list[str]]:
+    """Parse an inline gate string into direction, name, and parameters.
+
+    Args:
+        gate_str: Inline gate declaration, e.g. '?"In1" [foo_p:Int]'
+            (input, leading "?") or '!"Out1" []' (output, leading "!").
+
+    Returns:
+        Tuple of ("input" or "output", gate name, list of "name:type"
+        parameter strings; empty list if no parameters).
+    """
+    m = _GATE_RE.match(gate_str)
+    direction = "input" if m.group(1) == "?" else "output"
+    params = _split_top_level(m.group(3)) if m.group(3).strip() else []
+    return direction, m.group(2), params
+
 class STSExporter:
     """Generates DOT and HTML visualizations of a single STS dict.
 
-    Transitions are labeled with their gate ID only to keep the graph
-    readable. Full semantics (gate text, guard expressions, assignments)
-    are available in the DOT legend cluster and the HTML side panel.
-
     Args:
-        sts: A single STS dict. Must contain at minimum the keys id, description,
-            locations, switches, guards, inputGates, and outputGates.
+        sts: A single STS dict. Must contain at minimum the keys id,
+            initial_location (list of location IDs), initialValuation,
+            locations, and switches.
+        originals: Optional list of pre-composition STS dicts (one per
+            scenario, each with its own guards/inputGates/outputGates/
+            assignments), keyed internally by their own "id".
     """
 
-    def __init__(self, sts: dict[str, Any]) -> None:
+    def __init__(self, sts: dict[str, Any], originals: list[dict[str, Any]] | None = None) -> None:
         self._sts          = sts
-        self._initial_loc: str       = sts["initial_location"]
+        self._initial_locs: list[str] = sts["initial_location"]
+        self._initial_valuation: dict[str, Any] = sts["initialValuation"]
+        self._originals_by_id: dict[str, dict[str, Any]] = {o["id"]: o for o in originals or []}
         self._open_states: set[str]  = self._compute_open_states()
         self._gate_index:  dict[str, dict[str, Any]] = self._build_gate_index()
-        self._guard_index: dict[str, Any] = sts["guards"]
+        self._guard_index: dict[str, str] = self._build_guard_index()
+        self._assignment_index: dict[str, str] = self._build_assignment_index()
         with open(Path(__file__).parent.parent / "resources" / "sts_template.html", encoding="utf-8") as f:
           self.html_template = f.read()
 
@@ -64,46 +213,105 @@ class STSExporter:
         Returns:
             Set of location names with no outgoing switch.
         """
-        origins = {sw["init_loc"] for sw in self._sts["switches"].values()}
+        origins = {sw["init_loc"] for _, sw in _iter_switches(self._sts["switches"])}
         return {loc for loc in self._sts["locations"] if loc not in origins}
 
     def _build_gate_index(self) -> dict[str, dict[str, Any]]:
-        """Build a mapping from gate ID to its declaration and direction.
+        """Build a mapping from gate name to its declaration and direction.
 
         Returns:
-            Dict mapping each gate ID to a dict with keys
+            Dict mapping each gate name to a dict with keys
             text, parameters, and direction ("input" or
             "output").
         """
         index: dict[str, dict[str, Any]] = {}
-        for gid, ix in self._sts["inputGates"].items():
-            index[gid] = {
-                "text":       ix["text"],
-                "parameters": ix["parameters"],
-                "direction":  "input",
-            }
-        for gid, ix in self._sts["outputGates"].items():
-            index[gid] = {
-                "text":       ix["text"],
-                "parameters": ix["parameters"],
-                "direction":  "output",
-            }
+        for _, sw in _iter_switches(self._sts["switches"]):
+            direction, name, params = _parse_gate(sw["gate"])
+            if name in index:
+                continue
+            own_sts_id, _ = _parse_location(sw["init_loc"])
+            text = self._lookup_gate_text(own_sts_id, direction, name) or name
+            index[name] = {"text": text, "parameters": params, "direction": direction}
         return index
 
-    def _node_type(self, loc: str) -> str:
-        """Classify a location as "initial", "open", or "normal".
+    def _lookup_gate_text(self, own_sts_id: str, direction: str, name: str) -> str | None:
+        """Look up a gate's natural-language text in the original STSs.
 
         Args:
-            loc: Location name to classify.
+            own_sts_id: sts_id of the switch's own scenario, tried first.
+            direction: "input" or "output", selects the registry to check.
+            name: Gate name to look up.
 
         Returns:
-            One of "initial", "open", or "normal".
+            The gate's "text", or None if not found in any original.
         """
-        if loc == self._initial_loc:
-            return "initial"
-        if loc in self._open_states:
-            return "open"
-        return "normal"
+        registry_key = "inputGates" if direction == "input" else "outputGates"
+        candidates = [self._originals_by_id[own_sts_id]] if own_sts_id in self._originals_by_id else []
+        candidates += list(self._originals_by_id.values())
+        for original in candidates:
+            gate = original.get(registry_key, {}).get(name)
+            if gate is not None:
+                return gate.get("text")
+        return None
+
+    def _lookup_registry_item(self, own_sts_id: str, registry_key: str, item_id: str) -> Any | None:
+        """Look up an item by ID in the original STSs' registries.
+
+        Args:
+            own_sts_id: sts_id of the switch's own scenario, tried first.
+            registry_key: "guards" or "assignments".
+            item_id: ID to look up within that registry.
+
+        Returns:
+            The registry entry, or None if not found in any original.
+        """
+        candidates = [self._originals_by_id[own_sts_id]] if own_sts_id in self._originals_by_id else []
+        candidates += list(self._originals_by_id.values())
+        for original in candidates:
+            item = original.get(registry_key, {}).get(item_id)
+            if item is not None:
+                return item
+        return None
+
+    def _build_guard_index(self) -> dict[str, str]:
+        """Resolve guard IDs referenced by switches into rendered strings.
+
+        Returns:
+            Dict mapping each resolved guard ID to its rendered expression
+            string. IDs not found in any original are omitted.
+        """
+        index: dict[str, str] = {}
+        if not self._originals_by_id:
+            return index
+        for _, sw in _iter_switches(self._sts["switches"]):
+            own_sts_id, _ = _parse_location(sw["init_loc"])
+            for gid in sw.get("guard", []):
+                if gid in index:
+                    continue
+                tree = self._lookup_registry_item(own_sts_id, "guards", gid)
+                if tree is not None:
+                    index[gid] = render_guard_expr(tree)
+        return index
+
+    def _build_assignment_index(self) -> dict[str, str]:
+        """Resolve assignment IDs referenced by switches into "target := expr" strings.
+
+        Returns:
+            Dict mapping each resolved assignment ID to its display string.
+            IDs not found in any original are omitted.
+        """
+        index: dict[str, str] = {}
+        if not self._originals_by_id:
+            return index
+        for _, sw in _iter_switches(self._sts["switches"]):
+            aid = sw.get("assignments")
+            if not aid or aid in index:
+                continue
+            own_sts_id, _ = _parse_location(sw["init_loc"])
+            assignment = self._lookup_registry_item(own_sts_id, "assignments", aid)
+            if assignment is not None:
+                index[aid] = f'{assignment["target"]} := {render_guard_expr(assignment["expression"])}'
+        return index
 
     def to_dot(self) -> str:
         """Render the STS as a Graphviz DOT string.
@@ -123,30 +331,26 @@ class STSExporter:
             "",
         ]
 
-        # Invisible entry arrow into the initial state
-        lines += [
-            '    __start__ [shape=point width=0.15];',
-            f'    __start__ -> "{self._initial_loc}";',
-            "",
-        ]
+        # Invisible entry arrow(s) into the initial state(s)
+        lines.append('    __start__ [shape=point width=0.15];')
+        for loc in self._initial_locs:
+            lines.append(f'    __start__ -> "{_dot_attr_escape(loc)}";')
+        lines.append("")
 
         # Nodes
-        _NODE_STYLES = {
-            "initial": 'shape=doublecircle style=filled fillcolor="#aaddaa" color="#226622"',
-            "open":    'shape=circle style="filled,dashed" fillcolor="#ffeecc" color="#cc8800"',
-            "normal":  'shape=circle style=filled fillcolor="#ddeeff" color="#4488bb"',
-        }
+        
         for loc in sts["locations"]:
-            attrs = _NODE_STYLES[self._node_type(loc)]
-            lines.append(f'    "{loc}" [label="{_dot_attr_escape(loc)}" {attrs}];')
+            node_style = f'shape=doublecircle style=filled fillcolor="#ffffff" color="{_component_colors(loc)}"'
+            lines.append(f'    "{_dot_attr_escape(loc)}" [label="{_dot_attr_escape(_pretty_location(loc))}" {node_style}];')
         lines.append("")
 
         # Transitions
-        for sw_id, sw in sts["switches"].items():
-            guard_str = " && ".join(sw["guard"])
-            tooltip = _dot_attr_escape(f'{sw_id}: {sw["gate"]} [{guard_str}]')
+        for sw_id, sw in _iter_switches(sts["switches"]):
+            _, gate_name, _ = _parse_gate(sw["gate"])
+            guard_str = " && ".join(sw.get("guard", []))
+            tooltip = _dot_attr_escape(f'{sw_id}: {gate_name} [{guard_str}]')
             lines.append(
-                f'    "{sw["init_loc"]}" -> "{sw["end_loc"]}"'
+                f'    "{_dot_attr_escape(sw["init_loc"])}" -> "{_dot_attr_escape(sw["end_loc"])}"'
                 f' [label="{tooltip}" id="{sw_id}" tooltip="{tooltip}"];'
             )
         lines.append("")
@@ -173,6 +377,21 @@ class STSExporter:
             + "        </TABLE>"
         )
         lines.append(f"        legend [shape=none label=<{table}>];")
+
+        valuation_rows = [
+            '<TR><TD COLSPAN="2" BGCOLOR="#dddddd"><B>Initial Valuation</B></TD></TR>',
+        ]
+        for var, value in self._initial_valuation.items():
+            valuation_rows.append(
+                f'<TR><TD ALIGN="LEFT"><B>{_dot_html_escape(var)}</B></TD>'
+                f'<TD ALIGN="LEFT">{_dot_html_escape(_render_initial_value(value))}</TD></TR>'
+            )
+        valuation_table = (
+            '<TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="3">\n'
+            + "".join(f"        {r}\n" for r in valuation_rows)
+            + "        </TABLE>"
+        )
+        lines.append(f"        initial_valuation [shape=none label=<{valuation_table}>];")
         lines += ["    }", "}"]
 
         return "\n".join(lines)
@@ -184,14 +403,22 @@ class STSExporter:
             A self-contained HTML string that can be opened in any browser.
         """
         sts = self._sts
+        component_colors = _component_colors({_parse_location(loc)[0] for loc in sts["locations"]})
         elements: list[dict[str, Any]] = []
         for loc in sts["locations"]:
+            sts_id, _ = _parse_location(loc)
             elements.append({
                 "group": "nodes",
-                "data":  {"id": loc, "label": loc, "type": self._node_type(loc)},
+                "data":  {
+                    "id":             loc,
+                    "label":          _pretty_location(loc),
+                    "stsId":          sts_id,
+                    "componentColor": component_colors[sts_id],
+                },
             })
-        assignment_index = sts.get("assignments", {})
-        for sw_id, sw in sts["switches"].items():
+        for sw_id, sw in _iter_switches(sts["switches"]):
+            _, gate_name, _ = _parse_gate(sw["gate"])
+            assignment_list = sw.get("assignments")
             elements.append({
                 "group": "edges",
                 "data":  {
@@ -200,9 +427,9 @@ class STSExporter:
                     "target":      sw["end_loc"],
                     "label":       sw_id,
                     "switchId":    sw_id,
-                    "gateId":      sw["gate"],
-                    "guard":       sw["guard"],
-                    "assignments": [assignment_index[aid] for aid in sw.get("assignments", [])],
+                    "gateId":      gate_name,
+                    "guard":       sw.get("guard", []),
+                    "assignments": [self._assignment_index.get(aid, aid) for aid in assignment_list] if assignment_list else [],
                 },
             })
 
@@ -222,15 +449,31 @@ class STSExporter:
             )
 
         guard_rows: list[str] = []
-        for gid, node in self._guard_index.items():
+        for gid, rendered in self._guard_index.items():
             guard_rows.append(
                 f'<div class="legend-entry">'
                 f'<span class="legend-id">{_he(gid)}</span>'
-                f'<span class="legend-val">{_he(render_guard_expr(node))}</span>'
+                f'<span class="legend-val">{_he(rendered)}</span>'
                 f'</div>'
             )
 
-        title = f'{sts["id"]}: {sts["description"]}'
+        component_rows = [
+            f'<div class="node-key">'
+            f'<span class="ndot" style="background:{color};border-color:{color}"></span> {_he(sid)}'
+            f'</div>'
+            for sid, color in sorted(component_colors.items())
+        ]
+
+        valuation_rows: list[str] = []
+        for var, value in self._initial_valuation.items():
+            valuation_rows.append(
+                f'<div class="legend-entry">'
+                f'<span class="legend-id">{_he(var)}</span>'
+                f'<span class="legend-val">{_he(_render_initial_value(value))}</span>'
+                f'</div>'
+            )
+
+        title = sts["id"]
 
         return (
             self.html_template
@@ -238,10 +481,12 @@ class STSExporter:
             .replace("<<<ELEMENTS>>>",     json.dumps(elements))
             .replace("<<<GATES_DATA>>>",   json.dumps(self._gate_index))
             .replace("<<<GUARDS_DATA>>>",  json.dumps(self._guard_index))
-            .replace("<<<INITIAL_NODE>>>", json.dumps(self._initial_loc))
+            .replace("<<<INITIAL_NODES>>>", json.dumps(self._initial_locs))
             .replace("<<<FILENAME>>>",     json.dumps(sts["id"]))
             .replace("<<<LEGEND_GATES>>>", "\n".join(gate_rows))
             .replace("<<<LEGEND_GUARDS>>>","\n".join(guard_rows))
+            .replace("<<<LEGEND_INITIAL_VALUATION>>>", "\n".join(valuation_rows))
+            .replace("<<<LEGEND_COMPONENTS>>>", "\n".join(component_rows))
         )
 
 
