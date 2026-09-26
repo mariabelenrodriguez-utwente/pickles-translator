@@ -89,16 +89,16 @@ class SpecValidator:
         if type(guard) in [ArrayGuard, CollectionGuard, LengthGuard] and not isinstance(declared_type, ArrayType):
             raise ConsistencyError(
                 f"Variable '{varname}' has type "
-                f"'{type(declared_type).__name__}' but is used with a {type(guard)}"
+                f"'{type(declared_type).__name__}' but is used with a {type(guard).__name__}"
             )
 
-        # Struct-attribute boolean shorthand ("struct" is [not] "attr")
+        # struct-attribute boolean syntactic sugar ("struct" is [not] "attr")
         if isinstance(guard, AttrBoolGuard):
             if not isinstance(declared_type, StructType):
                 raise ConsistencyError(
                     f"Variable '{varname}' has type "
                     f"'{type(declared_type).__name__}' but is used with the "
-                    f"struct-attribute boolean shorthand (\"is [not] '{guard.attrid}'\")"
+                    f"struct-attribute boolean syntactic sugar (\"is [not] '{guard.attrid}'\")"
                 )
             attr = next((a for a in declared_type.attrs if a.attrid == guard.attrid), None)
             if attr is None:
