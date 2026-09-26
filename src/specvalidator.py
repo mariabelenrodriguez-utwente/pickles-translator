@@ -92,16 +92,6 @@ class SpecValidator:
                 f"'{type(declared_type).__name__}' but is used with a {type(guard)}"
             )
 
-        # "is subset of" against a right-hand side that isn't an array
-        if isinstance(guard, CollectionGuard) and guard.op == 'subset':
-            if isinstance(guard.value, VarRef):
-                rhs_type = self.variables.get(guard.value.varid)
-                if rhs_type is not None and not isinstance(rhs_type, ArrayType):
-                    raise ConsistencyError(
-                        f"'{guard.value.varid}' has type '{type(rhs_type).__name__}' but is used as "
-                        "the right-hand side of a 'subset' guard."
-                    )
-
         # Struct-attribute boolean shorthand ("struct" is [not] "attr")
         if isinstance(guard, AttrBoolGuard):
             if not isinstance(declared_type, StructType):
