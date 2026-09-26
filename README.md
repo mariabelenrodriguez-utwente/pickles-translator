@@ -81,7 +81,7 @@ python pickles_transducer.py tests \
 | `--json TESTS_JSON` | One of `--json`, `--trace` | Test cases JSON. It must match `schemas/test_cases.schema.json`. |
 | `--trace TRACE_TXT` | One of `--json`, `--trace` | Text file with one trace on each line. |
 | `--cucumber-template TEMPLATE_TXT` | No | Jinja2 template for a Cucumber `.feature` file. If set, the tool writes a `.feature` file, not a `.pickles` file. |
-| `--keyword-map MAP_JSON` | No | JSON map from Pickles action text to your own step text. Needs `--cucumber-template`. |
+| `--keyword-map MAP_JSON` | No | JSON map from Pickles gate text to your own step text. Needs `--cucumber-template`. |
 
 **Input:**
 - **Test cases JSON:** Each test case has initial values and an ordered list of switch executions. The `switch_id` and gate ids must exist in the `--sts` file. See `test_examples/detectors_tests.json`.
@@ -109,7 +109,7 @@ python pickles_transducer.py tests \
   ```
 
   See `input_files/cucumber_template.txt`.
-- **Keyword map:** Keys are the gate text in the Pickles specification. Values are the new step text. `{0}`, `{1}`, ... are the gate parameters. For an action with more than one variable, the value is a map from variable id to step text. The reserved key `__given__` replaces the Given header. See `input_files/coffee_machine_keyword_map.json`.
+- **Keyword map:** Keys are the gate text in the Pickles specification. Values are the new step text. `{0}`, `{1}`, ... are the gate parameters. For a gate with more than one parameter, the value is a map from variable id to step text. The reserved key `__given__` replaces the Given header. See `input_files/coffee_machine_keyword_map.json`.
 
   ```json
   {
@@ -168,6 +168,94 @@ python pickles_transducer.py visualize \
 
 **Output:** `output/<timestamp>_<sts_name>.dot` and/or `output/<timestamp>_<sts_name>.html`.
 
+## Execute Pickles as a Docker container with Make commands
+
+The `make` commands run the tool in Docker. Build the image first. The commands mount `input_files/`, `test_examples/` and `output/`, so they use your current files.
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build the Docker image with the current version in `VERSION`. |
+| `make build-patch` / `build-minor` / `build-major` | Increase the version in `VERSION` and build the Docker image. |
+| `make execute-sts [SPEC=...]` | Run `sts`. If `SPEC` is not set, the tool reads all files in `input_files/`. |
+| `make translate-tests JSON=... \| TRACE=... [STS=...] [TEMPLATE=...] [KEYWORD_MAP=...]` | Run `tests`. Set `JSON` or `TRACE`. If `STS` is not set, the tool uses the newest JSON in `output/`. |
+| `make visualize STS=... [FORMAT=...] [ORIGINALS=...]` | Run `visualize`. |
+
+```bash
+# Build the image (current version)
+make build
+
+# Coffee machine: STS, then traces -> Cucumber + proxy file
+make execute-sts SPEC=input_files/coffee_machine_spec.pickles
+make translate-tests \
+  TRACE=test_examples/coffee_tests.txt \
+  TEMPLATE=input_files/cucumber_template_coffee.txt \
+  KEYWORD_MAP=input_files/coffee_machine_keyword_map.json
+
+# Coffee machine: HTML graph
+make visualize STS=input_files/coffee_machine_composed_sts.json FORMAT=html
+```
+
+## Unit tests
+
+The unit tests are in `tests/`. Coverage needs `pytest-cov`:
+
+```bash
+pip install pytest-cov
+```
+
+Run the tests with a coverage report:
+
+```bash
+# With make
+make test
+
+# Full command
+python -m pytest --cov=src --cov-report={FORMAT}
+```
+Where FORMAT can be xml (consumed by SonarQube) or html.
+
+## SonarQube
+
+`sonar/docker-compose.yml` has a local SonarQube server (with a PostgreSQL database) and a scanner. The scanner uses `sonar/sonar-project.properties`.
+
+1. Start the server:
+
+    ```bash
+    docker compose -f sonar/docker-compose.yml up -d
+    ```
+
+2. Open http://localhost:9000. Log in with `admin` / `admin` and set a new password.
+3. Make a token: **My Account** → **Security** → **Generate Tokens**.
+4. Set the token in your shell:
+
+    ```bash
+    export SONAR_TOKEN=<your token>
+    ```
+
+5. Make the coverage report (see [Unit tests](#unit-tests)):
+
+    ```bash
+    make test
+    ```
+
+6. Run the scan:
+
+    ```bash
+    # With make (also starts the server if it is not running)
+    make sonar
+
+    # Full command
+    docker compose -f sonar/docker-compose.yml run --rm scanner
+    ```
+
+7. See the results at http://localhost:9000, project **Pickles Translator**.
+
+Stop the server:
+
+```bash
+docker compose -f sonar/docker-compose.yml down
+```
+
 ## Visualization
 
 ### Interactive HTML
@@ -194,7 +282,7 @@ dot -Tpng my_sts.dot -o my_sts.png
 
 The folder `pickles-vscode/` contains a VS Code extension for `.pickles` files. It provides:
 - Syntax highlighting.
-- An Outline view with the declared variables, constants, and the When/Then actions of each scenario.
+- An Outline view with the declared variables, constants, and the When/Then gates of each scenario.
 - Diagnostics: syntax errors and semantic errors (for example, undeclared variables or guards with incorrect types).
 - Keyword completion.
 

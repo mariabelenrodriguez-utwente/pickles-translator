@@ -2,7 +2,20 @@ SHELL := /bin/bash
 IMAGE_NAME := pickles-translator
 VERSION_FILE := VERSION
 
-.PHONY: build-patch build-minor build-major execute-sts translate-tests sts-dot-to-png
+DOCKER_RUN := docker run --rm \
+	-v "$(PWD)/input_files:/app/input_files" \
+	-v "$(PWD)/output:/app/output" \
+	$(IMAGE_NAME):latest
+
+SONAR_COMPOSE := docker compose -f sonar/docker-compose.yml
+
+# Newest STS JSON in output/ (used when STS is not set).
+LATEST_STS = $$(ls -t output/*.json 2>/dev/null | head -1)
+
+.PHONY: build build-patch build-minor build-major execute-sts translate-tests visualize test sonar
+
+build:
+	@$(MAKE) --no-print-directory _build
 
 build-patch:
 	@$(MAKE) --no-print-directory _build BUMP=patch
@@ -22,31 +35,41 @@ _build:
 		major) major=$$((major+1)); minor=0; patch=0 ;; \
 	esac; \
 	new="$$major.$$minor.$$patch"; \
-	echo "$$new" > $(VERSION_FILE); \
+	[ -z "$(BUMP)" ] || echo "$$new" > $(VERSION_FILE); \
 	docker build -t $(IMAGE_NAME):$$new -t $(IMAGE_NAME):latest .; \
 	echo "Built $(IMAGE_NAME):$$new"
 
 # Generate STS from all specs in input_files/ (pass SPEC=path to target one file)
 execute-sts:
-	docker run --rm \
-		-v "$(PWD)/input_files:/app/input_files" \
-		-v "$(PWD)/output:/app/output" \
-		$(IMAGE_NAME):latest sts $(if $(SPEC),--spec $(SPEC),)
+	$(DOCKER_RUN) sts $(if $(SPEC),--spec $(SPEC),)
 
-# Translate pre-generated test cases to NL text
-# Usage: make translate-tests [STS=output/foo_composed.json] TESTS=output/foo_tests.json
+# Translate test cases to Pickles or Cucumber text.
+# Usage: make translate-tests TRACE=test_examples/coffee_tests.txt [STS=...] [TEMPLATE=...] [KEYWORD_MAP=...]
+#        make translate-tests JSON=test_examples/detectors_tests.json [STS=...]
+# Set one of JSON or TRACE. STS defaults to the newest JSON in output/.
 translate-tests:
-	@_sts=$${STS:-$$(ls -t output/*_composed.json 2>/dev/null | head -1)}; \
-	[ -n "$$_sts" ] || { echo "No *_composed.json found in output/"; exit 1; }; \
-	docker run --rm \
-		-v "$(PWD)/output:/app/output" \
-		$(IMAGE_NAME):latest tests --sts "$$_sts" --tests $(TESTS)
+	@[ -n "$(JSON)$(TRACE)" ] || { echo "Set JSON=... or TRACE=..."; exit 1; }; \
+	_sts="$(STS)"; [ -n "$$_sts" ] || _sts=$(LATEST_STS); \
+	[ -n "$$_sts" ] || { echo "No STS json found in output/"; exit 1; }; \
+	$(DOCKER_RUN) tests --sts "$$_sts" \
+		$(if $(JSON),--json $(JSON),) \
+		$(if $(TRACE),--trace $(TRACE),) \
+		$(if $(TEMPLATE),--cucumber-template $(TEMPLATE),) \
+		$(if $(KEYWORD_MAP),--keyword-map $(KEYWORD_MAP),)
 
+# Render a composed STS as DOT and/or HTML.
+# Usage: make visualize STS=input_files/coffee_machine_composed_sts.json [FORMAT=html] [ORIGINALS=output/<name>.json]
+visualize:
+	@[ -n "$(STS)" ] || { echo "Set STS=..."; exit 1; }; \
+	$(DOCKER_RUN) visualize --sts $(STS) \
+		$(if $(FORMAT),--format $(FORMAT),) \
+		$(if $(ORIGINALS),--originals $(ORIGINALS),)
 
-# Convert the most recently generated *_composed.dot to PNG
-sts-dot-to-png:
-	@dot=$$(ls -t output/*_composed.dot 2>/dev/null | head -1); \
-	[ -n "$$dot" ] || { echo "No *_composed.dot found in output/"; exit 1; }; \
-	png="$${dot%.dot}.png"; \
-	dot -Tpng "$$dot" -o "$$png"; \
-	echo "Written $$png"
+# Run the unit tests with coverage.
+test:
+	python -m pytest --cov=src --cov-report=xml
+
+# Run a SonarQube scan. Needs SONAR_TOKEN. Starts the server if it is not running.
+sonar:
+	@[ -n "$$SONAR_TOKEN" ] || { echo "Set SONAR_TOKEN"; exit 1; }; \
+	$(SONAR_COMPOSE) up -d && $(SONAR_COMPOSE) run --rm scanner
