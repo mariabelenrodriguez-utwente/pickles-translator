@@ -40,7 +40,7 @@ python pickles_transducer.py sts --spec path/to/spec.pickles
 |----------|----------|-------------|
 | `--spec SPEC` | No | Path to one `.pickles` file. If not set, the tool reads all `.pickles` files in `input_files/`. |
 
-**Input:** A `.pickles` file in Pickles syntax. See `input_files/coffee_machine_spec.pickles`.
+**Input:** A `.pickles` file in Pickles syntax.
 
 **Output:** One file for each input file: `output/<timestamp>_<name>.json`. It contains a JSON array with one STS for each scenario. STS ids are unique across all input files of one run.
 
@@ -67,7 +67,7 @@ python pickles_transducer.py tests \
   --trace test_examples/coffee_tests.txt \
   --cucumber-template input_files/cucumber_template_coffee.txt
 
-# Traces -> Cucumber + proxy file wired to your own step definitions
+# Traces -> Cucumber with custom step definitions (keyword map)
 python pickles_transducer.py tests \
   --sts   output/<name>.json \
   --trace test_examples/coffee_tests.txt \
@@ -81,7 +81,7 @@ python pickles_transducer.py tests \
 | `--json TESTS_JSON` | One of `--json`, `--trace` | Test cases JSON. It must match `schemas/test_cases.schema.json`. |
 | `--trace TRACE_TXT` | One of `--json`, `--trace` | Text file with one trace on each line. |
 | `--cucumber-template TEMPLATE_TXT` | No | Jinja2 template for a Cucumber `.feature` file. If set, the tool writes a `.feature` file, not a `.pickles` file. |
-| `--keyword-map MAP_JSON` | No | JSON map from Pickles gate text to your own step text. Needs `--cucumber-template`. |
+| `--keyword-map MAP_JSON` | No | JSON map from Pickles gate text to your own step text. Needs `--cucumber-template`. The `.feature` file then uses custom step text. |
 
 **Input:**
 - **Test cases JSON:** Each test case has initial values and an ordered list of switch executions. The `switch_id` and gate ids must exist in the `--sts` file. See `test_examples/detectors_tests.json`.
@@ -125,7 +125,7 @@ python pickles_transducer.py tests \
 **Output:**
 - No template: `output/<sts_name>_test_cases.pickles`.
 - With template: `output/<sts_name>_test_cases.feature`. Structured values go to JSON files in the folder `output/<sts_name>_test_cases/`.
-- With template and keyword map: also `output/<sts_name>_test_cases_proxy.feature`.
+- With template and keyword map: the same `.feature` file, with the step text from the keyword map.
 
 Example Pickles output:
 
@@ -140,7 +140,7 @@ Then the machine has a current "beans level" equal to 12
 And the screen shows "state" equal to IDLE
 ```
 
-Example proxy `.feature` output (same test case, with the keyword map above):
+Example `.feature` output with the keyword map above (same test case):
 
 ```gherkin
   Scenario: Test Case 1
@@ -157,7 +157,7 @@ Renders a composed STS as a DOT file and/or an interactive HTML page.
 python pickles_transducer.py visualize \
   --sts input_files/coffee_machine_composed_sts.json \
   --format both \
-  --originals output/<timestamp>_coffee_machine_spec.json
+  --originals output/<timestamp>_coffee_machine_specification.json
 ```
 
 | Argument | Required | Description |
@@ -184,11 +184,11 @@ The `make` commands run the tool in Docker. Build the image first. The commands 
 # Build the image (current version)
 make build
 
-# Coffee machine: STS, then traces -> Cucumber + proxy file
-make execute-sts SPEC=input_files/coffee_machine_spec.pickles
+# Coffee machine: STS, then traces -> Cucumber with the keyword map
+make execute-sts SPEC=input_files/some_spec.pickles
 make translate-tests \
   TRACE=test_examples/coffee_tests.txt \
-  TEMPLATE=input_files/cucumber_template_coffee.txt \
+  TEMPLATE=input_files/cucumber_template.txt \
   KEYWORD_MAP=input_files/coffee_machine_keyword_map.json
 
 # Coffee machine: HTML graph
