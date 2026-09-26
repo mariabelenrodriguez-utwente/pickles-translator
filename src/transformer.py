@@ -333,16 +333,27 @@ def _serialize_prim_guard(guard: "AST.PrimGuard", subject, rhs_as_param: bool, c
             "op":  "&&",
             "rhs": {"lhs": subject, "op": "<=", "rhs": _serialize_value(hi, rhs_as_param, constant_ids)},
         }
-    if guard.op in ('in', 'not_in'):
-        rhs = _serialize_set_expr(guard.value, rhs_as_param, constant_ids)
-        return _expand_membership(subject, rhs, negate=(guard.op == 'not_in'))
+    if guard.op == 'in':
+        return  {
+            "lhs": subject,
+            "op": "elem",
+            "rhs": _serialize_set_expr(guard.value, rhs_as_param, constant_ids)
+        }
+    if guard.op == 'not_in':
+        return  {
+            "op": "not",
+            "rhs": {
+                "lhs": subject,
+                "op": "elem",
+                "rhs": _serialize_set_expr(guard.value, rhs_as_param, constant_ids)
+            }
+        }
     return {"lhs": subject, "op": guard.op,
-            "rhs": _serialize_value(guard.value, rhs_as_param, constant_ids)}
-
+        "rhs": _serialize_value(guard.value, rhs_as_param, constant_ids)}
 
 def _serialize_collection_guard(guard: "AST.CollectionGuard", subject, rhs_as_param: bool, card_key: str,
                                  constant_ids: set, domains: dict) -> dict:
-    """Build a guardExpr node for an array-only guard (contains*, is_empty*, subset).
+    """Build a guardExpr node for an array-only guard (contains*, is_empty*, contains_all).
 
     Args:
         guard: CollectionGuard to serialize.
@@ -358,10 +369,38 @@ def _serialize_collection_guard(guard: "AST.CollectionGuard", subject, rhs_as_pa
     Raises:
         ConsistencyError: "contains all possible elements" on a variable with no
             resolvable domain.
+        ValueError: Unknown collection guard operator.
     """
-    if guard.op in ('contains', 'not_contains', 'contains_only'):
-        return {"lhs": subject, "op": guard.op,
-                "rhs": _serialize_value(guard.value, rhs_as_param, constant_ids)}
+    # TODO: lhs of elem must be of the same type as the elements of the list
+    # is_empty, is_not_empty and contains_all have no value.
+    if guard.value is not None:
+        rhs = _serialize_value(guard.value, rhs_as_param, constant_ids)
+    if guard.op == 'contains':
+        return {"lhs": rhs, "op": "elem",
+                "rhs": subject}
+    if guard.op == 'not_contains':
+        return {
+                "op": "not", 
+                "rhs": {
+                    "lhs": rhs, 
+                    "op": "elem",
+                    "rhs": subject
+                }
+        }
+    if guard.op == 'contains_only': # rhs is one element, not another list
+        return   {
+            "lhs": {
+                "lhs": rhs,
+                "op": "elem",
+                "rhs": subject
+            },
+            "op": "&&",
+            "rhs": {
+                "lhs": { "op": "len", "rhs": subject },
+                "op": "==",
+                "rhs": { "integer": 1 }
+            }
+        }
     if guard.op == 'contains_all':
         # "X contains all possible elements"
         values = (domains or {}).get(card_key)
@@ -370,13 +409,11 @@ def _serialize_collection_guard(guard: "AST.CollectionGuard", subject, rhs_as_pa
                 f"Cannot determine the domain for 'contains all possible "
                 f"elements' on '{card_key}'; a range is needed"
             )
-        checks = [{"lhs": subject, "op": "contains", "rhs": _wrap(v)} for v in values]
+        checks = [{"lhs": _wrap(v), "op": "elem", "rhs": subject} for v in values]
         return _fold(checks, "&&", True)
     if guard.op in ('is_empty', 'is_not_empty'):
         return {"lhs": _len(subject), "op": "==" if guard.op == "is_empty" else "!=", "rhs": _wrap(0)}
-    # 'subset' falls here
-    return {"lhs": subject, "op": guard.op,
-            "rhs": _serialize_value(guard.value, rhs_as_param, constant_ids)}
+    raise ValueError(f"Unknown collection guard operator '{guard.op}'.")
 
 
 def _serialize_length_guard(guard: "AST.LengthGuard", subject, rhs_as_param: bool, constant_ids: set) -> dict:
@@ -612,7 +649,7 @@ class SpecTransformer(Transformer):
         value = next(
             c for c in children
             if isinstance(c, AST.RangeSpec)
-            or (isinstance(c, Token) and c.type != 'AND_INITIAL_VALUE')
+            or (isinstance(c, Token) and c.type not in ('AND_INITIAL_VALUE', 'WITH_INITIAL_VALUE'))
         )
         return AST.InitialValue(value, is_array=isinstance(value, AST.RangeSpec))
 
