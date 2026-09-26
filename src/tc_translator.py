@@ -32,11 +32,6 @@ _QUANT_TEXT: dict[str, str] = {
     'exactly':  'exactly',
 }
 
-_CONTAINS_TEXT: dict[str, str] = {
-    'contains':      'contains',
-    'not_contains':  'does not contain',
-    'contains_only': 'contains only',
-}
 
 
 def _split_top_level(node: Any) -> list[tuple[str | None, Any]]:
@@ -193,11 +188,30 @@ def _eval_expr(node: Any, state: dict) -> Any | None:
     return _unwrap(node)
 
 
+def _bind_observed(node: Any, values: dict) -> Any:
+    """Put observed parameter values in the rhs of "==" clauses on those parameters.
+
+    Args:
+        node: Guard tree or leaf node.
+        values: Parameter id to observed value map.
+
+    Returns:
+        A new guard tree. Other nodes stay the same.
+    """
+    if not isinstance(node, dict):
+        return node
+    if node.get('op') in _CONJ_TEXT:
+        return {**node, 'lhs': _bind_observed(node['lhs'], values), 'rhs': _bind_observed(node['rhs'], values)}
+    if node.get('op') == '==' and _var_path(node.get('lhs')) in values:
+        return {**node, 'rhs': values[_var_path(node['lhs'])]}
+    return node
+
+
 def _render_clause(clause: Any, spec: dict, shortened: bool = False, state: dict | None = None) -> str:
     """Render a single guard clause as natural language text.
 
     Args:
-        clause: A comparison, cardinality, exists, forall, subset, or contains node.
+        clause: A comparison, cardinality, exists, forall, or contains node.
         spec: The target STS dict.
         shortened: If True, omit the leading subject name.
         state: Current variable id to value map, used to resolve arithmetic values.
@@ -212,18 +226,15 @@ def _render_clause(clause: Any, spec: dict, shortened: bool = False, state: dict
         return _render_exists_clause(clause, spec, shortened=shortened)
     if isinstance(clause, dict) and clause.get('op') == 'forall':
         return _render_forall_clause(clause, spec, shortened=shortened)
-    if isinstance(clause, dict) and clause.get('op') == 'subset':
-        lhs, rhs = clause['lhs'], clause['rhs']
-        text = f'is subset of {_fmt_rhs(rhs, spec=spec)}'
-        return text if shortened else f'"{_fmt_subject(lhs, spec)}" {text}'
-    if isinstance(clause, dict) and clause.get('op') in _CONTAINS_TEXT:
-        lhs, op, rhs = clause['lhs'], clause['op'], clause['rhs']
-        text = f'{_CONTAINS_TEXT[op]} {_fmt_rhs(rhs, spec=spec)}'
-        return text if shortened else f'"{_fmt_subject(lhs, spec)}" {text}'
+    if isinstance(clause, dict) and clause.get('op') == 'elem':
+        return _render_elem_clause(clause, spec, shortened)
+    if (isinstance(clause, dict) and clause.get('op') == 'not'
+            and isinstance(clause.get('rhs'), dict) and clause['rhs'].get('op') == 'elem'):
+        return _render_elem_clause(clause['rhs'], spec, shortened, negate=True)
     if isinstance(clause, dict) and clause.get('op') == 'uniqueElem':
         text = 'has no duplicate elements'
         return text if shortened else f'"{_fmt_subject(clause.get("rhs"), spec)}" {text}'
-    if isinstance(clause, dict) and clause.get('op') == '!':
+    if isinstance(clause, dict) and clause.get('op') in ('!', 'not'):
         inner       = clause['rhs']
         len_operand = _len_operand(inner.get('lhs')) if isinstance(inner, dict) else None
         if (isinstance(inner, dict) and inner.get('op') == '==' and _unwrap(inner.get('rhs')) == 0
@@ -243,6 +254,26 @@ def _render_clause(clause: Any, spec: dict, shortened: bool = False, state: dict
         return f'{_OP_TEXT[op]} {_fmt_rhs(value, state, spec)}'
     else:
         return f'"{_fmt_subject(var, spec)}" is {_OP_TEXT[op]} {_fmt_rhs(value, state, spec)}'
+
+
+def _render_elem_clause(clause: dict, spec: dict, shortened: bool = False, negate: bool = False) -> str:
+    """Render an "elem" node as "is in" (literal set rhs) or "contains" (collection rhs).
+
+    Args:
+        clause: An "elem" node. lhs is the element, rhs is the collection.
+        spec: The target STS dict.
+        shortened: If True, omit the leading subject name.
+        negate: If True, render the negated form.
+
+    Returns:
+        Natural language string for the clause.
+    """
+    elem, coll = clause['lhs'], clause['rhs']
+    if isinstance(coll, list):
+        text = f'{"not in" if negate else "in"} {_fmt_rhs(coll, spec=spec)}'
+        return text if shortened else f'"{_fmt_subject(elem, spec)}" is {text}'
+    text = f'{"does not contain" if negate else "contains"} {_fmt_rhs(elem, spec=spec)}'
+    return text if shortened else f'"{_fmt_subject(coll, spec)}" {text}'
 
 
 def _render_count_clause(clause: dict, spec: dict, elem_binder: str | None = None,
@@ -590,6 +621,8 @@ def _is_json_value(val: Any) -> bool:
 class TestCaseTranslator:
     """Translates structured test case dicts to natural language text."""
 
+    __test__ = False  # Not a pytest test class.
+
     def __init__(self, spec: dict | list[dict]) -> None:
         """Initialize the translator with the target STS specification.
 
@@ -728,7 +761,7 @@ class TestCaseTranslator:
         gate       = sw.get('gate', '')
         if gate in self._input_idx:
             return self._render_input(gate, step.get('values', {}), json_dir, keyword_map)
-        return self._render_output(gate, sw.get('guard', []), spec, keyword_map, state)
+        return self._render_output(gate, sw.get('guard', []), spec, keyword_map, state, step.get('values'))
 
     def _write_json_value(self, base_name: str, val: Any, json_dir: str) -> str:
         """Write a dict or list-of-dict parameter value to a JSON file.
@@ -845,7 +878,8 @@ class TestCaseTranslator:
         return node
 
     def _render_output(self, gate: str, guard_ids: list[str], spec: dict | None = None,
-                        keyword_map: dict[str, Any] | None = None, state: dict | None = None) -> str:
+                        keyword_map: dict[str, Any] | None = None, state: dict | None = None,
+                        values: dict | None = None) -> str:
         """Render an output step as a Then clause with its guard condition.
 
         Args:
@@ -857,6 +891,8 @@ class TestCaseTranslator:
                 a per-variable map of templates, for the guard's clauses.
             state: Running variable id to value map for this test case.
                 Updated in place with each rendered equality clause.
+            values: Observed parameter id to value map. Replaces the rhs of
+                "==" clauses on these parameters.
 
         Returns:
             Natural language string starting with "Then".
@@ -866,6 +902,8 @@ class TestCaseTranslator:
         text       = action.get('text', gate)
         params     = action.get('parameters', [])
         guard_expr = self._resolve_guard(guard_ids, spec.get('guards', {}))
+        if values:
+            guard_expr = _bind_observed(guard_expr, values)
         parts      = _split_top_level(guard_expr) if guard_expr is not None else []
 
         updates = {}
