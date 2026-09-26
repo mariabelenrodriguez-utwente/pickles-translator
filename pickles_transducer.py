@@ -75,24 +75,18 @@ def cmd_translate_tests(args: argparse.Namespace) -> None:
     translator = TestCaseTranslator(specs)
 
     if args.cucumber_template:
-        feature_name = f"{ts}_{basename}_test_cases"
-        feature_path = f"output/{feature_name}.feature"
-        json_dir     = f"output/{feature_name}"
-        text = render_cucumber(test_cases, translator, args.cucumber_template, json_dir=json_dir)
-        with open(feature_path, "w") as f:
-            f.write(text)
-        print(f"Translated {len(test_cases)} test cases to Cucumber format -> {feature_path}")
-
+        keyword_map = None
         if args.keyword_map:
             with open(args.keyword_map) as f:
                 keyword_map = json.load(f)
-            proxy_translator = TestCaseTranslator(specs)
-            proxy_path = f"output/{feature_name}_proxy.feature"
-            proxy_text = render_cucumber(test_cases, proxy_translator, args.cucumber_template,
-                                          json_dir=json_dir, keyword_map=keyword_map)
-            with open(proxy_path, "w") as f:
-                f.write(proxy_text)
-            print(f"Wired proxy Cucumber format -> {proxy_path}")
+        feature_name = f"{ts}_{basename}_test_cases"
+        feature_path = f"output/{feature_name}.feature"
+        json_dir     = f"output/{feature_name}"
+        text = render_cucumber(test_cases, translator, args.cucumber_template,
+                               json_dir=json_dir, keyword_map=keyword_map)
+        with open(feature_path, "w") as f:
+            f.write(text)
+        print(f"Translated {len(test_cases)} test cases to Cucumber format -> {feature_path}")
     else:
         nl_path = f"output/{ts}_{basename}_test_cases.pickles"
         translator.translate(test_cases, nl_path)
@@ -140,7 +134,7 @@ if __name__ == "__main__":
                                ".feature file instead of the default .pickles text output.")
     p_tests.add_argument("--keyword-map", default=None, metavar="MAP_JSON",
                           help="Path to a JSON file mapping pickles gate text to a keyword mapping from Pickles "
-                               "keywords to custom step definitions. Requires --cucumber-template.")
+                               "keywords to custom step definitions. Requires --cucumber-template. The .feature file uses the mapped steps.")
 
     p_viz = sub.add_parser("visualize", help="Render an STS JSON dict as DOT/HTML visualizations")
     p_viz.add_argument("--sts", required=True, metavar="STS_JSON", help="Path to the STS JSON dict to visualize")
