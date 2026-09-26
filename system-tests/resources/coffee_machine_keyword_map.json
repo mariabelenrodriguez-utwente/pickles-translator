@@ -1,0 +1,13 @@
+{
+  "the user selects a": "I select a \"{0}\" \"{1}\"",
+  "the user clicks Brew": "I click Brew",
+  "the user clicks on beans refill": "I refill \"beans\"",
+  "the user refills the water tank": "I refill \"water\"",
+  "the screen shows": "the screen shows the \"{0}\" state",
+  "the screen shows an error banner indicating no beans": "an error banner shows \"Out of beans.\"",
+  "the screen shows an error banner indicating no water": "an error banner shows \"Out of water.\"",
+  "the machine has a current": {
+    "water-level": "the water level is {0} ml",
+    "beans-level": "the beans level is {0} g"
+  }
+}
