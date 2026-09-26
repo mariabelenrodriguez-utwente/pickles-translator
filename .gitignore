@@ -210,3 +210,6 @@ __marimo__/
 /output/*
 /input_files/
 launch.json
+
+# Lattest tester
+.stack-work/
