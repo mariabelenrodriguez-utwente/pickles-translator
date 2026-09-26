@@ -208,4 +208,5 @@ __marimo__/
 
 # Other files
 /output/*
+/input_files/
 launch.json
