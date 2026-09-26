@@ -18,7 +18,11 @@ _LOC_PENDING_RE = re.compile(r'^pending\s+([?!]"[^"]+"\s*\[.*\])\s*->\s*"([^"]+)
 _COMPONENT_PALETTE = [
     "#e67e22", "#3498db", "#9b59b6", "#2ecc71",
     "#e74c3c", "#1abc9c", "#f1c40f", "#7f8c8d",
-] # TODO: Add more colours that are distinguishable from each other
+    "#6df50c", "#00a6ff", "#ffe786", "#4b6365",
+    "#e74c3c", "#77C100", "#4e4317", "#222f67",
+    "#ffb4e1", "#365112", "#ac711e", "#403791",
+    "#b340a9", "#005d4a", "#895400", "#950ea7",
+]
 
 def _dot_attr_escape(s: str) -> str:
     """Escape a string for use as a DOT double-quoted attribute value.
@@ -94,17 +98,20 @@ def _split_top_level(s: str, sep: str = ",") -> list[str]:
 def _parse_location(loc: str) -> tuple[str, str]:
     """Parse a "(sts_id, loc_id)" location string into its two parts.
 
-    The second element is usually a plain quoted location id (e.g.
-    '"L0_1"'), but can be a "pending" marker waiting on an output gate,
-    e.g. 'pending !"Out1" [...] -> "L2_1"'. Pending markers are
+    The string may be wrapped in Left/Right. Pending markers are
     simplified to "pending <gate name> -> <target loc>".
 
     Args:
-        loc: Location string, e.g. '("sts_001","L0_1")'.
+        loc (str): Location string, e.g. 'Left ("sts_001","L0_1")'.
 
     Returns:
         Tuple of (sts_id, loc_id).
     """
+    if "Right" in loc:
+        loc = loc.replace("Right ", "")
+    if "Left" in loc:
+        loc = loc.replace("Left ", "")    
+
     outer = _LOC_OUTER_RE.match(loc)
     sts_id, rest = outer.group(1), outer.group(2)
     plain = _LOC_PLAIN_RE.match(rest)
@@ -304,13 +311,14 @@ class STSExporter:
         if not self._originals_by_id:
             return index
         for _, sw in _iter_switches(self._sts["switches"]):
-            aid = sw.get("assignments")
-            if not aid or aid in index:
-                continue
-            own_sts_id, _ = _parse_location(sw["init_loc"])
-            assignment = self._lookup_registry_item(own_sts_id, "assignments", aid)
-            if assignment is not None:
-                index[aid] = f'{assignment["target"]} := {render_guard_expr(assignment["expression"])}'
+            aid_list = sw.get("assignments")
+            for aid in aid_list:
+                if not aid or aid in index:
+                    continue
+                own_sts_id, _ = _parse_location(sw["init_loc"])
+                assignment = self._lookup_registry_item(own_sts_id, "assignments", aid)
+                if assignment is not None:
+                    index[aid] = f'{assignment["target"]} := {render_guard_expr(assignment["expression"])}'
         return index
 
     def to_dot(self) -> str:
