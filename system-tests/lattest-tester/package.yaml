@@ -1,0 +1,64 @@
+name:                lattest-tester
+version:             0.1.0.0
+github:              "githubuser/lattest-tester"
+license:             BSD-3-Clause
+author:              "Author name here"
+maintainer:          "example@example.com"
+copyright:           "2024 Author name here"
+
+dependencies:
+- base >= 4.7 && < 5
+- bytestring == 0.12.1.0
+- aeson == 2.2.3.0
+- cassava
+- time == 1.12.2
+- io-streams == 1.5.2.2
+- network >= 3.1.2.7
+- containers >= 0.6.0.1
+- mtl >= 2.0
+- stm >= 2.1
+- MissingH >= 1.2.0.0
+- bytestring >= 0.10.8.2
+- text >= 1.2.5.0
+- network >= 3.1.2.7
+- io-streams >= 1.4.0.0
+- attoparsec >= 0.14.4
+- attoparsec-data >= 1.0.5.3
+- aeson >= 2.0.0.0
+- attoparsec-aeson >= 2.1.0.0
+- time >= 1.12.2
+- random >= 1.2.1.1
+- extra >= 1.7.14
+- unbounded-delays >= 0.1.1.1
+- either >= 5.0.2
+- lattices >= 2.0.0
+- stm >= 2.5.1.0
+- filepath == 1.4.301.0
+- directory == 1.3.8.5
+- deepseq >= 1.5.1.0
+- lattest-lib
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wpartial-fields
+- -Wredundant-constraints
+
+library:
+  source-dirs: src
+
+executables:
+  lattest-tester-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - lattest-tester
