@@ -16,7 +16,6 @@ IN: "in " | "is in "
 NOT_IN: "niet in " | "is niet in "
 
 LENGTH: "lengte "
-SUBSET_OF: "subset van "
 WITHRANGE: "en bereik "
 RESOLUTION: "resolutie "
 AND_INITIAL_VALUE: "en initiële waarde "

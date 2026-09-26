@@ -19,7 +19,6 @@ _OP_MAP = {
     'LOWER_THAN':           '<',
     'GREATER_OR_EQUAL_THAN': '>=',
     'LOWER_OR_EQUAL_THAN':  '<=',
-    'SUBSET_OF':            'subset',
 }
 
 _CONJ_MAP = {
@@ -40,7 +39,7 @@ _QUANT_MAP = {
 
 _ARRAY_ONLY_OPS = {
     'contains', 'not_contains', 'contains_only', 'contains_all',
-    'is_empty', 'is_not_empty', 'subset',
+    'is_empty', 'is_not_empty',
 }
 
 # render_guard_expr's text for a "cardinality" guard node's `quantifier` field.

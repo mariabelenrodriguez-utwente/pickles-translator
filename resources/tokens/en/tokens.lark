@@ -49,7 +49,6 @@ IN: "in " | "is in "
 NOT_IN: "not in " | "is not in "
 
 LENGTH: "length "
-SUBSET_OF: "subset of "
 
 EQUAL_TO: "equal to "
 NOT_EQUAL_TO: "not equal to "

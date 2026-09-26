@@ -51,7 +51,6 @@ IN: "en " | "está en "
 NOT_IN: "no en " | "no está en "
 
 LENGTH: "longitud "
-SUBSET_OF: "subconjunto de "
 
 EQUAL_TO: "igual a "
 NOT_EQUAL_TO: "distinto a "
