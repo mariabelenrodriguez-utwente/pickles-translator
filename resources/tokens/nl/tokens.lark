@@ -19,6 +19,7 @@ LENGTH: "lengte "
 WITHRANGE: "en bereik "
 RESOLUTION: "resolutie "
 AND_INITIAL_VALUE: "en initiële waarde "
+WITH_INITIAL_VALUE: "met initiële waarde "
 
 ARRAYOF: "array van "
 UNIQUE: "unieke "

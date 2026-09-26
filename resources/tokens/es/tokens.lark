@@ -16,6 +16,7 @@ ISTHE: "es el " | "es la "
 WITHRANGE: "con rango "
 RESOLUTION: "resolución "
 AND_INITIAL_VALUE: "y valor inicial "
+WITH_INITIAL_VALUE: "con valor inicial "
 
 ARRAYOF: "arreglo de "
 UNIQUE: "único "

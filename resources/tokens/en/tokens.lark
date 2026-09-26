@@ -14,6 +14,7 @@ ISTHE: "is the "
 WITHRANGE: "with range "
 RESOLUTION: "resolution "
 AND_INITIAL_VALUE: "and initial value "
+WITH_INITIAL_VALUE: "with initial value "
 
 ARRAYOF: "array of "
 UNIQUE: "unique "
