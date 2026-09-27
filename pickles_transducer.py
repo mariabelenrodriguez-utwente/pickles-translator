@@ -1,15 +1,32 @@
 import argparse
 from datetime import datetime
 import json
+import logging
 import os
 
 from src.transformer import PicklesToSTS
-from src.composer import compose_stss
-from src.exporter import STSExporter
 from src.tc_translator import TestCaseTranslator
+from src.trace_parser import parse_traces_file
+from src.cucumber_renderer import render_cucumber
+from src.exporter import STSExporter
+
+ts       = datetime.now().strftime("%Y%m%dT%H%M%S")
+LOG_PATH = f"output/pickles_{ts}.log"
+
+def _configure_logging() -> None:
+    """Route logs to a file"""
+    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+    logging.basicConfig(
+        filename=LOG_PATH,
+        filemode="a",
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
 
 def cmd_generate_sts(args: argparse.Namespace) -> None:
-    """Process .pickles spec(s) and write STS JSON + exports."""
+    """Process .pickles spec(s) and write a JSON array of STS definitions."""
     pickles = PicklesToSTS()
     parser  = pickles.load_parser(lang="en")
     sts_id  = 1
@@ -34,46 +51,69 @@ def cmd_generate_sts(args: argparse.Namespace) -> None:
         print(f"Processing: {filename}  ({len(sts_list)} scenario(s))")
         print(f"{'='*60}")
 
-        partial_path = f"output/{ts}_{basename}.json"
-        with open(partial_path, "w") as out:
+        sts_path = f"output/{ts}_{basename}.json"
+        with open(sts_path, "w") as out:
             json.dump(sts_list, out, indent=4)
-        print(f"  [partial STSs]  -> {partial_path}")
-
-        composed      = compose_stss(sts_list)
-        composed_path = f"output/{ts}_{basename}_composed.json"
-        with open(composed_path, "w") as out:
-            json.dump(composed, out, indent=4)
-        print(f"  [composed STS]  -> {composed_path}")
-        print(f"    locations : {len(composed['locations'])}")
-        print(f"    switches  : {len(composed['switches'])}")
-        print(f"    guards    : {len(composed['guards'])}")
-
-        exporter  = STSExporter(composed)
-        dot_path  = f"output/{ts}_{basename}_composed.dot"
-        html_path = f"output/{ts}_{basename}_composed.html"
-        exporter.write_dot(dot_path)
-        exporter.write_html(html_path)
-        print(f"  [dot]           -> {dot_path}")
-        print(f"  [html]          -> {html_path}")
+        print(f"  [STSs]  -> {sts_path}")
 
     print(f"\n{'='*60}")
     print("Done.")
 
 
 def cmd_translate_tests(args: argparse.Namespace) -> None:
-    """Translate pre-generated test cases JSON to natural language (Pickles format)."""
+    """Translate test cases (JSON or trace strings) to Pickles or Cucumber format."""
     with open(args.sts) as f:
-        composed = json.load(f)
-    with open(args.tests) as f:
-        test_cases = json.load(f)
+        specs = json.load(f)
 
-    ts       = datetime.now().strftime("%Y%m%dT%H%M%S")
+    if args.json:
+        with open(args.json) as f:
+            test_cases = json.load(f)
+    else:
+        test_cases = parse_traces_file(args.trace, specs)
+
+    basename   = os.path.splitext(os.path.basename(args.sts))[0]
+    translator = TestCaseTranslator(specs)
+
+    if args.cucumber_template:
+        keyword_map = None
+        if args.keyword_map:
+            with open(args.keyword_map) as f:
+                keyword_map = json.load(f)
+        feature_name = f"{ts}_{basename}_test_cases"
+        feature_path = f"output/{feature_name}.feature"
+        json_dir     = f"output/{feature_name}"
+        text = render_cucumber(test_cases, translator, args.cucumber_template,
+                               json_dir=json_dir, keyword_map=keyword_map)
+        with open(feature_path, "w") as f:
+            f.write(text)
+        print(f"Translated {len(test_cases)} test cases to Cucumber format -> {feature_path}")
+    else:
+        nl_path = f"output/{ts}_{basename}_test_cases.pickles"
+        translator.translate(test_cases, nl_path)
+        print(f"Translated {len(test_cases)} test cases to Pickles format -> {nl_path}")
+
+
+def cmd_visualize(args: argparse.Namespace) -> None:
+    """Render an STS JSON dict as a DOT and/or HTML visualization."""
+    with open(args.sts) as f:
+        sts = json.load(f)
+
+    originals = None
+    if args.originals:
+        with open(args.originals) as f:
+            originals = json.load(f)
+
     basename = os.path.splitext(os.path.basename(args.sts))[0]
-    nl_path  = f"output/{ts}_{basename}_test_cases.pickles"
+    exporter = STSExporter(sts, originals=originals)
 
-    translator = TestCaseTranslator(composed)
-    translator.translate(test_cases, nl_path)
-    print(f"Translated {len(test_cases)} test cases to Pickles format -> {nl_path}")
+    if args.format in ("dot", "both"):
+        dot_path = f"output/{ts}_{basename}.dot"
+        exporter.write_dot(dot_path)
+        print(f"  [DOT]  -> {dot_path}")
+    if args.format in ("html", "both"):
+        html_path = f"output/{ts}_{basename}.html"
+        exporter.write_html(html_path)
+        print(f"  [HTML] -> {html_path}")
 
 
 if __name__ == "__main__":
@@ -84,12 +124,31 @@ if __name__ == "__main__":
     p_sts.add_argument("--spec", default=None, metavar="SPEC_TXT",
                        help="Path to a single spec file (default: all files in input_files/)")
 
-    p_tests = sub.add_parser("tests", help="Translate test cases JSON to natural language")
-    p_tests.add_argument("--sts",   required=True, metavar="STS_JSON",   help="Path to composed STS JSON")
-    p_tests.add_argument("--tests", required=True, metavar="TESTS_JSON", help="Path to test cases JSON")
+    p_tests = sub.add_parser("tests", help="Translate test cases (JSON or traces) to natural language")
+    p_tests.add_argument("--sts", required=True, metavar="STS_JSON", help="Path to the STS JSON the test cases target")
+    p_tests_in = p_tests.add_mutually_exclusive_group(required=True)
+    p_tests_in.add_argument("--json",  metavar="TESTS_JSON", help="Path to a test cases JSON file")
+    p_tests_in.add_argument("--trace", metavar="TRACE_TXT",  help="Path to a file with one trace string per line")
+    p_tests.add_argument("--cucumber-template", default=None, metavar="TEMPLATE_TXT",
+                          help="Path to a Jinja2 Cucumber .feature template. If given, writes a "
+                               ".feature file instead of the default .pickles text output.")
+    p_tests.add_argument("--keyword-map", default=None, metavar="MAP_JSON",
+                          help="Path to a JSON file mapping pickles gate text to a keyword mapping from Pickles "
+                               "keywords to custom step definitions. Requires --cucumber-template. The .feature file uses the mapped steps.")
+
+    p_viz = sub.add_parser("visualize", help="Render an STS JSON dict as DOT/HTML visualizations")
+    p_viz.add_argument("--sts", required=True, metavar="STS_JSON", help="Path to the STS JSON dict to visualize")
+    p_viz.add_argument("--format", choices=["dot", "html", "both"], default="both",
+                        help="Output format to write (default: both)")
+    p_viz.add_argument("--originals", default=None, metavar="ORIGINALS_JSON",
+                        help="Path to a JSON array of STS dicts (as produced by 'sts'). If given, gate text and guard/assignment "
+                             "expressions are resolved based on this file, instead of shown as raw IDs.")
 
     args = ap.parse_args()
+    _configure_logging()
     if args.command == "sts":
         cmd_generate_sts(args)
-    else:
+    elif args.command == "tests":
         cmd_translate_tests(args)
+    else:
+        cmd_visualize(args)

@@ -2,7 +2,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "sts_partial.schema.json",
     "title": "Partial STS Array",
-    "description": "Array of partial Symbolic Transition Systems (STS), one per Gherkin scenario. Produced by the pickles-translator as '<timestamp>_<basename>.json'. Each element describes the states, gates, guards, and switches derived from a single Given/When/Then scenario.",
+    "description": "Partial STSs. One STS for each Pickles scenario.",
     "type": "array",
     "minItems": 1,
     "items": {
@@ -11,18 +11,18 @@
     "$defs": {
         "variableDefinition": {
             "title": "Variable Definition",
-            "description": "Type annotation and finite domain for a single STS variable.",
+            "description": "Type and domain of a variable, an array element or a structure attribute. Arrays and structures can nest to any depth.",
             "type": "object",
             "required": ["type"],
             "additionalProperties": false,
             "properties": {
                 "type": {
-                    "description": "Data type of the variable. 'decimal' maps to floating-point numbers.",
+                    "description": "Data type. An 'array' or a 'structure' is one entry. The translator does not expand it into slots or attributes.",
                     "type": "string",
-                    "enum": ["string", "integer", "decimal", "boolean"]
+                    "enum": ["string", "integer", "float", "boolean", "array", "structure"]
                 },
                 "range": {
-                    "description": "Finite ordered list of allowed values. Element JSON type must be consistent with 'type': string→string, integer/decimal→number, boolean→boolean.",
+                    "description": "Allowed values of a scalar variable, in order. The JSON type must agree with 'type'.",
                     "type": "array",
                     "minItems": 1,
                     "items": {
@@ -32,26 +32,49 @@
                             {"type": "boolean"}
                         ]
                     }
+                },
+                "minLength": {
+                    "description": "Only for arrays. Minimum length.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "maxLength": {
+                    "description": "Only for arrays. Maximum length.",
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "unique": {
+                    "description": "Only for arrays. If true, all elements must be different. The translator adds a 'uniqueElem' guard to each switch that uses the variable.",
+                    "type": "boolean"
+                },
+                "elements": {
+                    "description": "Only for arrays. Definition of each element: a primitive, an array or a structure.",
+                    "$ref": "#/$defs/variableDefinition"
+                },
+                "attributes": {
+                    "description": "Only for structures. One definition for each attribute, keyed by attribute ID.",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/variableDefinition"}
                 }
             }
         },
         "gate": {
             "title": "Gate",
-            "description": "An input or output gate with a natural-language label and a list of parameters it communicates.",
+            "description": "An input or output gate. It has a label and a list of parameters.",
             "type": "object",
             "required": ["text", "parameters"],
             "additionalProperties": false,
             "properties": {
                 "text": {
-                    "description": "Natural-language label extracted from the Gherkin 'When' (input) or 'Then' (output) step.",
+                    "description": "Label from the Pickles 'When' (input) or 'Then' (output) step.",
                     "type": "string"
                 },
                 "shortname": {
-                    "description": "Optional short identifier for the gate, for display purposes.",
+                    "description": "Optional short ID for display.",
                     "type": "string"
                 },
                 "parameters": {
-                    "description": "Ordered list of parameter IDs communicated by this gate. Each ID must be a key in the parent STS 'parameters' map. May be empty.",
+                    "description": "Parameter IDs of the gate, in order. Each ID is a key in the STS 'parameters' map. Can be empty.",
                     "type": "array",
                     "items": {"type": "string"}
                 }
@@ -59,100 +82,225 @@
         },
         "guardExpr": {
             "title": "Guard Expression",
-            "description": "A boolean/arithmetic expression node: a variable reference or literal leaf, or a nested operator node.",
+            "description": "An expression node: a variable reference, a literal or an operator node.",
             "oneOf": [
-                {"type": "string", "description": "Variable reference (e.g. 'waterlevel', 'arr[0].lane', 'arr.len()') or string literal."},
-                {"type": "number"},
-                {"type": "boolean"},
+                {
+                    "title": "Variable Reference",
+                    "description": "Reference to a variable, a parameter or a quantifier 'element' (e.g. 'x'). For a structure attribute, use 'project'.",
+                    "type": "object",
+                    "required": ["var"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "var": {"type": "string"}
+                    }
+                },
+                {
+                    "title": "String literal",
+                    "description": "A string literal.",
+                    "type": "object",
+                    "required": ["string"],
+                    "additionalProperties": false,
+                    "properties": {"string": {"type": "string"}}
+                },
+                {
+                    "title": "Integer literal",
+                    "description": "An integer literal.",
+                    "type": "object",
+                    "required": ["integer"],
+                    "additionalProperties": false,
+                    "properties": {"integer": {"type": "integer"}}
+                },
+                {
+                    "title": "Float literal",
+                    "description": "A float literal.",
+                    "type": "object",
+                    "required": ["float"],
+                    "additionalProperties": false,
+                    "properties": {"float": {"type": "number"}}
+                },
+                {
+                    "title": "Boolean literal",
+                    "description": "A boolean literal.",
+                    "type": "object",
+                    "required": ["boolean"],
+                    "additionalProperties": false,
+                    "properties": {"boolean": {"type": "boolean"}}
+                },
                 {
                     "type": "array",
-                    "description": "Set literal, used as the rhs of 'in' / 'not in'.",
+                    "description": "Set literal. It is the rhs of 'in' or 'not in' when the spec gives the values inline. A named constant array uses a Variable Reference.",
                     "items": {"$ref": "#/$defs/guardExpr"}
                 },
                 {
                     "title": "Binary operator node",
+                    "description": "A node with two operands. 'elem' is true if 'lhs' is in the array 'rhs'. 'project' gets attribute 'rhs' of structure 'lhs'. Chain 'project' nodes for nested attributes.",
                     "type": "object",
                     "required": ["lhs", "op", "rhs"],
                     "additionalProperties": false,
                     "properties": {
                         "lhs": {"$ref": "#/$defs/guardExpr"},
-                        "op": {"type": "string", "enum": ["==", "!=", ">", "<", ">=", "<=", "&&", "||", "+", "-", "*", "/", "in", "not in"]},
+                        "op": {"type": "string", "enum": ["==", "!=", ">", "<", ">=", "<=", "&&", "||", "+", "-", "*", "/", "in", "not in", "elem", "contains", "not_contains", "contains_only", "project"]},
                         "rhs": {"$ref": "#/$defs/guardExpr"}
                     }
                 },
                 {
-                    "title": "Unary negation node",
+                    "title": "Unary operator node",
+                    "description": "A node with one operand, 'rhs'. '!' negates a boolean expression. 'not' negates a membership check. 'len' gives the length of an array. 'uniqueElem' is true if all array elements are different.",
                     "type": "object",
                     "required": ["op", "rhs"],
                     "additionalProperties": false,
                     "properties": {
-                        "op": {"type": "string", "const": "!"},
+                        "op": {"type": "string", "enum": ["!", "not", "len", "uniqueElem"]},
                         "rhs": {"$ref": "#/$defs/guardExpr"}
+                    }
+                },
+                {
+                    "title": "Count guard node",
+                    "description": "True if the number of elements in 'over' that satisfy 'expression' is 'quantifier' 'n'. From 'X has at least/at most/exactly N elements where each element ...'. For 'at least 1', see 'exists'.",
+                    "type": "object",
+                    "required": ["op", "quantifier", "n", "over", "lambda", "expression"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "op": {"type": "string", "const": "cardinality"},
+                        "quantifier": {"type": "string", "enum": ["at_least", "at_most", "exactly"]},
+                        "n": {"type": "integer", "minimum": 0, "description": "The number of elements to compare."},
+                        "over": {
+                            "$ref": "#/$defs/guardExpr",
+                            "description": "The array to check. A Variable Reference, or a 'project' chain for a structure attribute."
+                        },
+                        "lambda": {
+                            "type": "string",
+                            "description": "Name of the current element (e.g. 'x'). Use it in 'expression' as {\"var\": \"x\"}. A nested quantifier uses a different name."
+                        },
+                        "expression": {
+                            "$ref": "#/$defs/guardExpr",
+                            "description": "The condition for each element. Refer to the element by its 'element' name. Use 'project' to get its attributes."
+                        }
+                    }
+                },
+                {
+                    "title": "Exists guard node",
+                    "description": "True if one or more elements in 'over' satisfy 'expression'. From 'X has at least 1 element where each element ...'.",
+                    "type": "object",
+                    "required": ["op", "over", "lambda", "expression"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "op": {"type": "string", "const": "exists"},
+                        "over": {
+                            "$ref": "#/$defs/guardExpr",
+                            "description": "The array to check. Same as in 'count'."
+                        },
+                        "lambda": {
+                            "type": "string",
+                            "description": "Name of the current element. Same as in 'count'."
+                        },
+                        "expression": {
+                            "$ref": "#/$defs/guardExpr",
+                            "description": "The condition for each element. Same as in 'count'."
+                        }
+                    }
+                },
+                {
+                    "title": "Forall guard node",
+                    "description": "True if all elements in 'over' satisfy 'expression'. From 'X has all elements where each element ...'. The translator also adds it to keep array elements in range.",
+                    "type": "object",
+                    "required": ["op", "over", "lambda", "expression"],
+                    "additionalProperties": false,
+                    "properties": {
+                        "op": {"type": "string", "const": "forall"},
+                        "over": {
+                            "$ref": "#/$defs/guardExpr",
+                            "description": "The array to check. Same as in 'count'."
+                        },
+                        "lambda": {
+                            "type": "string",
+                            "description": "Name of the current element. Same as in 'count'."
+                        },
+                        "expression": {
+                            "$ref": "#/$defs/guardExpr",
+                            "description": "The condition for each element. Same as in 'count'."
+                        }
                     }
                 }
             ]
         },
+        "initialScalar": {
+            "title": "Initial Scalar Value",
+            "description": "A plain JSON literal for an initial value.",
+            "type": ["string", "number", "boolean"]
+        },
+        "initialValue": {
+            "title": "Initial Value",
+            "description": "Initial value of a variable. A scalar for a primitive, or an array of scalars for an array.",
+            "oneOf": [
+                {"$ref": "#/$defs/initialScalar"},
+                {"type": "array", "items": {"$ref": "#/$defs/initialScalar"}}
+            ]
+        },
         "assignment": {
             "title": "Assignment",
-            "description": "A single variable update executed atomically when a switch fires.",
+            "description": "One variable update. It occurs when the switch is executed.",
             "type": "object",
             "required": ["target", "expression"],
             "additionalProperties": false,
             "properties": {
                 "target": {
-                    "description": "Target variable ID. Must be a base-name key from the parent STS 'locationVariables' map (non-expanded, e.g. 'faulty-detectors', not 'faulty-detectors[0].lane').",
+                    "description": "Target variable ID. It is a key in the STS 'locationVariables' map.",
                     "type": "string"
                 },
                 "expression": {
-                    "description": "Right-hand side expression. Typically the corresponding parameter ID (e.g. 'faulty-detectors_p'), but may be a computed expression.",
+                    "description": "Right-hand side. Usually a parameter reference (e.g. {\"var\": \"water-level_p\"}).",
                     "$ref": "#/$defs/guardExpr"
                 }
             }
         },
         "switch": {
             "title": "Switch",
-            "description": "A labelled transition between two locations. Fires when the gate is triggered and the guard holds; executes the assignments on firing.",
+            "description": "A transition between two locations. It is executed when its gate occurs and all its guards hold. Then its assignments occur.",
             "type": "object",
             "required": ["init_loc", "gate", "guard", "assignments", "end_loc"],
             "additionalProperties": false,
             "properties": {
                 "init_loc": {
-                    "description": "Source location ID. Must appear in the parent STS 'locations' array.",
+                    "description": "Source location ID. It is in the STS 'locations' array.",
                     "type": "string"
                 },
                 "gate": {
-                    "description": "ID of the triggering gate. Must be a key in the parent STS 'inputGates' or 'outputGates' map.",
+                    "description": "Gate ID. It is a key in 'inputGates' or 'outputGates'.",
                     "type": "string"
                 },
                 "guard": {
-                    "description": "ID of the single guard from the parent STS 'guards' map that must hold for this switch to fire.",
-                    "type": "string"
+                    "description": "Guard IDs from the STS 'guards' map. All guards must hold. The translator adds range guards for each variable that the switch uses, and a 'len' guard for array length.",
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 1},
+                    "minItems": 1
                 },
                 "assignments": {
-                    "description": "Ordered list of assignment IDs from the parent STS 'assignments' map, executed when the switch fires. May be empty.",
+                    "description": "Assignment IDs from the STS 'assignments' map, in order. Can be empty.",
                     "type": "array",
                     "items": {"type": "string"}
                 },
                 "end_loc": {
-                    "description": "Target location ID. Must appear in the parent STS 'locations' array.",
+                    "description": "Target location ID. It is in the STS 'locations' array.",
                     "type": "string"
                 }
             }
         },
         "sts": {
             "title": "STS",
-            "description": "A single Symbolic Transition System derived from one Gherkin scenario.",
+            "description": "One STS from one Pickles scenario.",
             "type": "object",
             "required": [
                 "id",
                 "description",
+                "documentation",
                 "initial_state",
                 "initial_location",
                 "gate_id_type",
                 "location_id_type",
                 "locationVariables",
                 "parameters",
-                "attributes",
+                "initialValuation",
                 "locations",
                 "inputGates",
                 "outputGates",
@@ -163,81 +311,81 @@
             "additionalProperties": false,
             "properties": {
                 "id": {
-                    "description": "Unique STS identifier. Format: 'sts_NNN' where NNN is a zero-padded 3-digit integer (e.g. 'sts_001').",
+                    "description": "STS ID: 'sts_NNN' (e.g. 'sts_001').",
                     "type": "string",
                     "pattern": "^sts_\\d{3}$"
                 },
                 "description": {
-                    "description": "Human-readable scenario label, typically prefixed with the scenario number (e.g. '01: faulty detectors outside the critical section').",
+                    "description": "Scenario label, usually with the scenario number first.",
+                    "type": "string"
+                },
+                "documentation": {
+                    "description": "Text from the optional 'Documentation:' section. Empty if not present. Newlines become spaces.",
                     "type": "string"
                 },
                 "initial_state": {
-                    "description": "True when this scenario's Given step contains an INITCOND predicate, marking it as a contributor to the system initial state.",
+                    "description": "True if the Given step has an INITCOND predicate. Then the scenario sets the initial state of the system.",
                     "type": "boolean"
                 },
                 "initial_location": {
-                    "description": "The unique starting location for this STS. Always 'L0_<N>' where N is the numeric part of 'id' (e.g. 'L0_1' for 'sts_001').",
+                    "description": "Start location: 'L0_<N>'. N is the number in 'id' (e.g. 'L0_1').",
                     "type": "string",
                     "pattern": "^L0_\\d+$"
                 },
                 "gate_id_type": {
-                    "description": "JSON type used for gate IDs.",
+                    "description": "JSON type of gate IDs.",
                     "type": "string",
                     "enum": ["string", "integer"]
                 },
                 "location_id_type": {
-                    "description": "JSON type used for location IDs.",
+                    "description": "JSON type of location IDs.",
                     "type": "string",
                     "enum": ["string", "integer"]
                 },
                 "initialValuation": {
-                    "description": "Optional initial value per location variable.",
-                    "type": "object"
+                    "description": "Initial value of each location variable, keyed by variable ID. A variable with no initial value has no key. A constant always has a key.",
+                    "type": "object",
+                    "additionalProperties": {"$ref": "#/$defs/initialValue"}
                 },
                 "locationVariables": {
-                    "description": "All state variables in the system, keyed by variable ID. Primitive and boolean variables use their base name. Array-of-struct variables are expanded: 'arrayName[i].attrName' is a separate entry for each element index i and attribute name. Primitive arrays use 'arrayName[i]'.",
+                    "description": "All location variables, keyed by variable ID. Each variable is one entry, also arrays and structures.",
                     "type": "object",
                     "additionalProperties": {"$ref": "#/$defs/variableDefinition"}
                 },
                 "parameters": {
-                    "description": "Gate parameters derived from location variables: one parameter per location variable, keyed by the variable ID suffixed with '_p' (e.g. 'availability_p' for variable 'availability'). Same type and range as the source variable.",
-                    "type": "object",
-                    "additionalProperties": {"$ref": "#/$defs/variableDefinition"}
-                },
-                "attributes": {
-                    "description": "Always empty: struct attribute types are inferable from the expanded 'locationVariables' keys (e.g. 'arr[0].attr').",
+                    "description": "Gate parameters. One for each location variable, keyed by variable ID + '_p'. Same type and range as the variable.",
                     "type": "object",
                     "additionalProperties": {"$ref": "#/$defs/variableDefinition"}
                 },
                 "locations": {
-                    "description": "Ordered list of all location IDs in this STS. For a scenario with M 'When' steps and N 'Then' steps there are M+N+1 locations: 'L0_<id>', 'L1_<id>', ..., 'L<M+N>_<id>'.",
+                    "description": "All location IDs, in order.",
                     "type": "array",
                     "minItems": 2,
                     "items": {"type": "string"},
                     "uniqueItems": true
                 },
                 "inputGates": {
-                    "description": "Input gates derived from Gherkin 'When' steps, keyed by gate ID. Format: 'In<sts_num>_<step_num>' (e.g. 'In1_1' = first When of sts_001).",
+                    "description": "Input gates from 'When' steps, keyed by gate ID. The same text and parameters give the same ID in all STSs of the file.",
                     "type": "object",
                     "additionalProperties": {"$ref": "#/$defs/gate"}
                 },
                 "outputGates": {
-                    "description": "Output gates derived from Gherkin 'Then' steps, keyed by gate ID. Format: 'Out<sts_num>_<step_num>' (e.g. 'Out1_1' = first Then of sts_001).",
+                    "description": "Output gates from 'Then' steps, keyed by gate ID. IDs are shared between STSs, as in 'inputGates'.",
                     "type": "object",
                     "additionalProperties": {"$ref": "#/$defs/gate"}
                 },
                 "guards": {
-                    "description": "Named guard expression trees keyed by guard ID ('G1', 'G2', ...). Guards are generated from Given, When, and Then step conditions. Each STS resets the counter from G1.",
+                    "description": "Guards keyed by ID ('G1_STS001', 'G2_STS001', ...). They come from Given, When and Then steps. They are unique between STSs.",
                     "type": "object",
                     "additionalProperties": {"$ref": "#/$defs/guardExpr"}
                 },
                 "assignments": {
-                    "description": "Named variable assignments keyed by assignment ID ('A1', 'A2', ...). Each STS resets the counter from A1.",
+                    "description": "Assignments keyed by ID ('A1_STS001', 'A2_STS001', ...). They are unique between STSs.",
                     "type": "object",
                     "additionalProperties": {"$ref": "#/$defs/assignment"}
                 },
                 "switches": {
-                    "description": "Labelled transitions keyed by switch ID ('r_1', 'r_2', ...). One switch is generated per When step and one per Then step, in scenario order.",
+                    "description": "Switches keyed by ID ('r_1', 'r_2', ...). One for each When step and each Then step, in scenario order.",
                     "type": "object",
                     "additionalProperties": {"$ref": "#/$defs/switch"}
                 }

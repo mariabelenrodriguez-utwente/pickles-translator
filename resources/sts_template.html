@@ -51,6 +51,7 @@
   <div id="toolbar">
     <h1><<<TITLE_ESC>>></h1>
     <button id="btn-fit">Fit</button>
+    <button id="btn-color-mode">Color: State</button>
     <button id="btn-png">Export PNG</button>
   </div>
   <div id="main">
@@ -59,30 +60,24 @@
       <h2>Switch detail</h2>
       <div id="detail"><span class="hint">Click a switch to see its full details.</span></div>
 
-      <h2>Location types</h2>
-      <div class="node-key">
-        <span class="ndot" style="background:#aaddaa;border-color:#226622"></span> Initial location
-      </div>
-      <div class="node-key">
-        <span class="ndot" style="background:#ffeecc;border-color:#cc8800;border-style:dashed"></span>
-        Open location
-      </div>
-      <div class="node-key">
-        <span class="ndot" style="background:#ddeeff;border-color:#4488bb"></span> Closed location
-      </div>
+      <h2>Components</h2>
+      <div id="legend-components"><<<LEGEND_COMPONENTS>>></div>
 
       <h2>Gates</h2>
       <div id="legend-gates"><<<LEGEND_GATES>>></div>
 
       <h2>Guards</h2>
       <div id="legend-guards"><<<LEGEND_GUARDS>>></div>
+
+      <h2>Initial Valuation</h2>
+      <div id="legend-initial-valuation"><<<LEGEND_INITIAL_VALUATION>>></div>
     </div>
   </div>
   <script>
     var elements   = <<<ELEMENTS>>>;
     var gatesData  = <<<GATES_DATA>>>;
     var guardsData = <<<GUARDS_DATA>>>;
-    var initialNode = <<<INITIAL_NODE>>>;
+    var initialNodes = <<<INITIAL_NODES>>>;
     var exportFilename = <<<FILENAME>>>;
 
     function escHtml(s) {
@@ -91,12 +86,13 @@
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    function expandGuard(guardStr) {
-      return guardStr.replace(/\\bG\\d+\\b/g, function(id) {
+    function expandGuard(guardIds) {
+      // guardIds is the list of guard IDs to AND together
+      return guardIds.map(function(id) {
         return guardsData[id] !== undefined
           ? '(' + escHtml(guardsData[id]) + ')'
           : escHtml(id);
-      });
+      }).join(' && ');
     }
 
     var cy = cytoscape({
@@ -105,7 +101,7 @@
       layout: {
         name: 'breadthfirst',
         directed: true,
-        roots: [initialNode],
+        roots: initialNodes,
         padding: 40,
         spacingFactor: 1.5,
       },
@@ -120,25 +116,16 @@
             'font-size': '11px',
             'width': 56,
             'height': 56,
-            'background-color': '#ddeeff',
+            'background-color': 'data(componentColor)',
             'border-width': 2,
-            'border-color': '#4488bb',
+            'border-color': 'data(componentColor)',
           }
         },
         {
-          selector: 'node[type="initial"]',
+          selector: 'node.by-component',
           style: {
-            'background-color': '#aaddaa',
-            'border-color': '#226622',
-            'border-width': 3,
-          }
-        },
-        {
-          selector: 'node[type="open"]',
-          style: {
-            'background-color': '#ffeecc',
-            'border-color': '#cc8800',
-            'border-style': 'dashed',
+            'background-color': 'data(componentColor)',
+            'border-color': 'data(componentColor)',
           }
         },
         {
@@ -176,12 +163,10 @@
       var d    = evt.target.data();
       var gate = gatesData[d.gateId] || {};
       var dirClass = gate.direction === 'input' ? 'dir-in' : 'dir-out';
-      var dirLabel = gate.direction === 'input' ? 'input ↓' : 'output ↑';
+      var dirLabel = gate.direction === 'input' ? 'input' : 'output';
       var params   = (gate.parameters || []).join(', ') || '\u2014';
       var expGuard = expandGuard(d.guard);
-      var asgn     = (d.assignment || [])
-        .map(function(a) { return escHtml(a.variable) + ' := ' + escHtml(a.expression); })
-        .join('<br>') || '\u2014';
+      var asgn     = (d.assignments || []).map(escHtml).join('<br>') || '\u2014';
 
       document.getElementById('detail').innerHTML =
         '<div class="detail-row">' +
@@ -216,6 +201,12 @@
 
     document.getElementById('btn-fit').addEventListener('click', function() {
       cy.fit(undefined, 40);
+    });
+
+    document.getElementById('btn-color-mode').addEventListener('click', function() {
+      var byComponent = !cy.nodes().hasClass('by-component');
+      cy.nodes().toggleClass('by-component', byComponent);
+      this.textContent = 'Color: ' + (byComponent ? 'Component' : 'State');
     });
 
     document.getElementById('btn-png').addEventListener('click', function() {

@@ -1,0 +1,10 @@
+Feature: Coffee machine GUI — Americano
+
+  Background:
+    Given the machine has been reset to full stock and is idle
+
+{% for test in test_cases %}
+  Scenario: {{ test.id }}
+{{ test.body }}
+
+{% endfor %}

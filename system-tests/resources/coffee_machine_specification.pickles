@@ -1,0 +1,71 @@
+Variable Settings
+"drink" is a structure with attributes "type", "size" such that:
+    "type" is a string with range {Espresso, Americano}
+    "size" is a string with range {Small, Large}
+"state" is a string with range {IDLE, BREWING, DONE, OUT OF STOCK} and initial value 'IDLE'
+"water level" is an integer with range [0,210] and initial value 210
+"beans level" is an integer with range [0,12] and initial value 12
+"max water level" is the integer 210
+"max beans level" is the integer 12
+
+Scenario 01: brewing a small Americano
+Documentation: Brews a small Americano and deducts water and beans
+Given the machine has a current "water level", "beans level" such that:
+    "water level" is greater or equal than 105 AND
+    "beans level" is greater or equal than 6
+And the screen shows "state" equal to 'IDLE'
+When the user selects a "drink" such that:
+    "drink" has attributes such that:
+        "type" is equal to 'Americano' AND
+        "size" is equal to 'Small'
+And the user clicks Brew
+Then the screen shows "state" equal to 'BREWING'
+And the screen shows "state" equal to 'DONE'
+And the screen shows "state" equal to 'IDLE'
+And the machine has a current "water level", "beans level" such that:
+    "water level" is equal to stored "water level" - 105 AND
+    "beans level" is equal to stored "beans level" - 6
+
+Scenario 02: brewing a large Americano
+Documentation: Brews a large Americano and deducts water and beans.
+Given the machine has a current "water level", "beans level" such that:
+    "water level" is greater or equal than 210 AND
+    "beans level" is greater or equal than 12
+And the screen shows "state" equal to 'IDLE'
+When the user selects a "drink" such that:
+    "drink" has attributes such that:
+        "type" is equal to 'Americano' AND
+        "size" is equal to 'Large'
+And the user clicks Brew
+Then the screen shows "state" equal to 'BREWING'
+And the screen shows "state" equal to 'DONE'
+And the screen shows "state" equal to 'IDLE'
+And the machine has a current "water level", "beans level" such that:
+    "water level" is equal to stored "water level" - 210 AND
+    "beans level" is equal to stored "beans level" - 12
+
+Scenario 03: ordering is rejected when there are no beans
+Given the machine has a current "beans level" equal to 0
+When the user selects a "drink"  # any drink would do!
+And the user clicks Brew
+Then the screen shows an error banner indicating no beans
+And the screen shows "state" equal to 'OUT OF STOCK'  # after this, I can't brew coffee anymore!
+
+Scenario 04: ordering is rejected when there is no water
+Given the machine has a current "water level" equal to 0
+When the user selects a "drink"  # any drink would do!
+And the user clicks Brew
+Then the screen shows an error banner indicating no water
+And the screen shows "state" equal to 'OUT OF STOCK'   # after this, I can't brew coffee anymore!
+
+Scenario 05: the user refills coffee beans
+Documentation: Refills the beans level to its maximum.
+When the user clicks on beans refill
+Then the machine has a current "beans level" equal to "max beans level"
+And the screen shows "state" equal to 'IDLE'
+
+Scenario 06: the user refills water level
+Documentation: Refills the water level to its maximum.
+When the user refills the water tank
+Then the machine has a current "water level" equal to "max water level"
+And the screen shows "state" equal to 'IDLE'

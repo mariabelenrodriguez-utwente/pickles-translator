@@ -1,12 +1,17 @@
 {
   "name": "pickles-syntax",
   "displayName": "Pickles Syntax Highlighting",
-  "description": "Syntax highlighting for the Pickles specification language (.pickles files)",
-  "version": "0.1.0",
+  "description": "Syntax highlighting and language tooling for the Pickles specification language (.pickles files)",
+  "version": "0.2.0",
+  "publisher": "pickles",
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": ["Programming Languages"],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:pickles"
+  ],
   "contributes": {
     "languages": [
       {
@@ -22,6 +27,34 @@
         "scopeName": "source.pickles",
         "path": "./syntaxes/pickles.tmLanguage.json"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Pickles",
+      "properties": {
+        "pickles.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python interpreter used to run the Pickles language server (pickles_lsp_server.py). Must have pickles-translator's requirements.txt, plus pygls, installed."
+        },
+        "pickles.serverScript": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to pickles_lsp_server.py."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.9.0"
   }
 }

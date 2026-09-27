@@ -1,160 +1,339 @@
 # pickles-translator
 
-A (structured) natural language specification transducer that converts specifications in Pickles syntax into Symbolic Transition System (STS) JSON, with composition and visualization output.
+A transducer for (structured) natural language specifications. It converts specifications in Pickles syntax into Symbolic Transition System (STS) JSON and allows to visualize it. It also translates test cases back into natural language.
+
+If you want to know more about how to model with Pickles, you can read the [docs](./docs/index.md).
 
 ## Setup
 
 ```bash
 conda create --name pickles python=3.10
 conda activate pickles
-pip install -r requirements.pickles
+pip install -r requirements.txt
 ```
 
 ## Running
 
-The tool has two subcommands.
+The tool has three modes:
 
-**Generate STS** — process spec files and write STS JSON + visualization:
+| Mode        | Input                                        | Output                                   |
+|-------------|----------------------------------------------|------------------------------------------|
+| `sts`       | `.pickles` specification(s)                  | STS JSON array                           |
+| `tests`     | STS JSON + test cases (JSON or trace file)   | Test cases in Pickles or Cucumber syntax |
+| `visualize` | Composed STS JSON                            | DOT and/or HTML graph                    |
+
+All output files go to `output/`. Each run also writes a log file to `output/pickles_<timestamp>.log`.
+
+### `sts` — Generate STS
+
+Converts `.pickles` specifications into STS JSON.
 
 ```bash
-conda activate pickles
-
 # All .pickles files in input_files/
 python pickles_transducer.py sts
 
-# Single spec file
+# One specification file
 python pickles_transducer.py sts --spec path/to/spec.pickles
 ```
 
-For each input file, the following outputs are written to `output/`:
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--spec SPEC` | No | Path to one `.pickles` file. If not set, the tool reads all `.pickles` files in `input_files/`. |
 
-| File | Contents |
-|---|---|
-| `<name>.json` | One STS per scenario (partial STSs) |
-| `<name>_composed.json` | Single composed STS (choice + sequential composition) |
-| `<name>_composed.dot` | Graphviz DOT file for the composed STS |
-| `<name>_composed.html` | Self-contained interactive HTML for the composed STS |
+**Input:** A `.pickles` file in Pickles syntax.
 
-**Translate test cases** — convert a pre-generated test cases JSON to natural language:
+**Output:** One file for each input file: `output/<timestamp>_<name>.json`. It contains a JSON array with one STS for each scenario. STS ids are unique across all input files of one run.
+
+A separate downstream tool composes this array into one system model.
+
+### `tests` — Translate test cases
+
+Translates test cases into natural language. The input is either a test cases JSON file (`--json`) or test trace .txt file (`--trace`). The output is Pickles syntax (default) or a Cucumber `.feature` file.
 
 ```bash
+# Traces -> Pickles
 python pickles_transducer.py tests \
-  --sts   output/<name>_composed.json \
-  --tests output/<name>_tests.json
+  --sts   output/<name>.json \
+  --trace test_examples/coffee_tests.txt
+
+# Test cases JSON -> Pickles
+python pickles_transducer.py tests \
+  --sts  output/<name>.json \
+  --json output/<name>_tests.json
+
+# Traces -> Cucumber
+python pickles_transducer.py tests \
+  --sts   output/<name>.json \
+  --trace test_examples/coffee_tests.txt \
+  --cucumber-template input_files/cucumber_template_coffee.txt
+
+# Traces -> Cucumber with custom step definitions (keyword map)
+python pickles_transducer.py tests \
+  --sts   output/<name>.json \
+  --trace test_examples/coffee_tests.txt \
+  --cucumber-template input_files/cucumber_template_coffee.txt \
+  --keyword-map input_files/coffee_machine_keyword_map.json
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--sts STS_JSON` | Yes | STS JSON that the test cases refer to. Use an STS array from `sts` mode or a composed STS from the downstream tool. |
+| `--json TESTS_JSON` | One of `--json`, `--trace` | Test cases JSON. It must match `schemas/test_cases.schema.json`. |
+| `--trace TRACE_TXT` | One of `--json`, `--trace` | Text file with one trace on each line. |
+| `--cucumber-template TEMPLATE_TXT` | No | Jinja2 template for a Cucumber `.feature` file. If set, the tool writes a `.feature` file, not a `.pickles` file. |
+| `--keyword-map MAP_JSON` | No | JSON map from Pickles gate text to your own step text. Needs `--cucumber-template`. The `.feature` file then uses custom step text. |
+
+**Input:**
+- **Test cases JSON:** Each test case has initial values and an ordered list of switch executions. The `switch_id` and gate ids must exist in the `--sts` file. See `test_examples/detectors_tests.json`.
+
+  ```json
+  [{"initial_location": "L0_comp",
+    "initial_values": {"state": "IDLE", "water-level": 210},
+    "steps": [{"switch_id": "r_5", "values": {}}]}]
+  ```
+- **Trace file:** Each line is test cases as generated by the Lattest tool.
+- **Cucumber template:** A Jinja2 file. It can use these variables:
+  - `background_given`: the shared Given block. It is empty if the test cases have different initial values.
+  - `test_cases`: a list. Each item has `id` and `body`.
+
+  ```
+  Feature: Coffee machine
+  {% if background_given %}
+    Background:
+  {{ background_given }}
+  {% endif %}
+  {% for test in test_cases %}
+    Scenario: {{ test.id }}
+  {{ test.body }}
+  {% endfor %}
+  ```
+
+  See `input_files/cucumber_template.txt`.
+- **Keyword map:** Keys are the gate text in the Pickles specification. Values are the new step text. `{0}`, `{1}`, ... are the gate parameters. For a gate with more than one parameter, the value is a map from variable id to step text. The reserved key `__given__` replaces the Given header. See `input_files/coffee_machine_keyword_map.json`.
+
+  ```json
+  {
+    "the user clicks on beans refill": "I refill \"beans\"",
+    "the screen shows": "the screen shows the \"{0}\" state",
+    "the machine has a current": {
+      "water-level": "the water level is {0} ml",
+      "beans-level": "the beans level is {0} g"
+    }
+  }
+  ```
+
+**Output:**
+- No template: `output/<sts_name>_test_cases.pickles`.
+- With template: `output/<sts_name>_test_cases.feature`. Structured values go to JSON files in the folder `output/<sts_name>_test_cases/`.
+- With template and keyword map: the same `.feature` file, with the step text from the keyword map.
+
+Example Pickles output:
+
+```
+Test Case 1:
+Given the system is initialized with values:
+    "state": IDLE
+    "water level": 210
+    "beans level": 12
+When the user clicks on beans refill
+Then the machine has a current "beans level" equal to 12
+And the screen shows "state" equal to IDLE
+```
+
+Example `.feature` output with the keyword map above (same test case):
+
+```gherkin
+  Scenario: Test Case 1
+    When I refill "beans"
+    Then the beans level is 12 g
+    And the screen shows the "IDLE" state
+```
+
+### `visualize` — Render an STS graph
+
+Renders a composed STS as a DOT file and/or an interactive HTML page.
+
+```bash
+python pickles_transducer.py visualize \
+  --sts input_files/coffee_machine_composed_sts.json \
+  --format both \
+  --originals output/<timestamp>_coffee_machine_specification.json
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--sts STS_JSON` | Yes | Composed STS JSON (one STS dict). See `input_files/coffee_machine_composed_sts.json`. |
+| `--format {dot,html,both}` | No | Output format. Default: `both`. |
+| `--originals ORIGINALS_JSON` | No | STS JSON array from `sts` mode (before composition). If set, the graph shows gate text, guards and assignments. If not set, it shows raw ids. |
+
+**Output:** `output/<timestamp>_<sts_name>.dot` and/or `output/<timestamp>_<sts_name>.html`.
+
+## Execute Pickles as a Docker container with Make commands
+
+The `make` commands run the tool in Docker. Build the image first. The commands mount `input_files/`, `test_examples/` and `output/`, so they use your current files.
+
+| Command | Description |
+|---------|-------------|
+| `make build` | Build the Docker image with the current version in `VERSION`. |
+| `make build-patch` / `build-minor` / `build-major` | Increase the version in `VERSION` and build the Docker image. |
+| `make execute-sts [SPEC=...]` | Run `sts`. If `SPEC` is not set, the tool reads all files in `input_files/`. |
+| `make translate-tests JSON=... \| TRACE=... [STS=...] [TEMPLATE=...] [KEYWORD_MAP=...]` | Run `tests`. Set `JSON` or `TRACE`. If `STS` is not set, the tool uses the newest JSON in `output/`. |
+| `make visualize STS=... [FORMAT=...] [ORIGINALS=...]` | Run `visualize`. |
+
+```bash
+# Build the image (current version)
+make build
+
+# Coffee machine: STS, then traces -> Cucumber with the keyword map
+make execute-sts SPEC=input_files/some_spec.pickles
+make translate-tests \
+  TRACE=test_examples/coffee_tests.txt \
+  TEMPLATE=input_files/cucumber_template.txt \
+  KEYWORD_MAP=input_files/coffee_machine_keyword_map.json
+
+# Coffee machine: HTML graph
+make visualize STS=input_files/coffee_machine_composed_sts.json FORMAT=html
+```
+
+## Unit tests
+
+The unit tests are in `tests/`. Coverage needs `pytest-cov`:
+
+```bash
+pip install pytest-cov
+```
+
+Run the tests with a coverage report:
+
+```bash
+# With make
+make test
+
+# Full command
+python -m pytest --cov=src --cov-report={FORMAT}
+```
+Where FORMAT can be xml (consumed by SonarQube) or html.
+
+## SonarQube
+
+`sonar/docker-compose.yml` has a local SonarQube server (with a PostgreSQL database) and a scanner. The scanner uses `sonar/sonar-project.properties`.
+
+1. Start the server:
+
+    ```bash
+    docker compose -f sonar/docker-compose.yml up -d
+    ```
+
+2. Open http://localhost:9000. Log in with `admin` / `admin` and set a new password.
+3. Make a token: **My Account** → **Security** → **Generate Tokens**.
+4. Set the token in your shell:
+
+    ```bash
+    export SONAR_TOKEN=<your token>
+    ```
+
+5. Make the coverage report (see [Unit tests](#unit-tests)):
+
+    ```bash
+    make test
+    ```
+
+6. Run the scan:
+
+    ```bash
+    # With make (also starts the server if it is not running)
+    make sonar
+
+    # Full command
+    docker compose -f sonar/docker-compose.yml run --rm scanner
+    ```
+
+7. See the results at http://localhost:9000, project **Pickles Translator**.
+
+Stop the server:
+
+```bash
+docker compose -f sonar/docker-compose.yml down
 ```
 
 ## Visualization
 
 ### Interactive HTML
 
-Open `output/<name>_composed.html` in any browser.
-- Click any switch to see its gate, guard, and assignment in the side panel.
-- Use **Fit** to reset the viewport and **Export PNG** to save a static image.
+- Click a switch to see its gate, guard and assignments in the side panel. If using VSCode, right-click on it and select "Open in Integrated Browser".
+- Use **Fit** to reset the view. Use **Export PNG** to save a static image.
 
 ### DOT / Graphviz (static)
 
-Render the DOT file to PDF or SVG with the Graphviz `dot` command:
+Use the Graphviz `dot` command to convert a DOT file to PDF, SVG or PNG:
 
 ```bash
 # PDF
-dot -Tpdf output/spec_composed.dot -o output/spec_composed.pdf
+dot -Tpdf my_sts.dot -o my_sts.pdf
 
 # SVG
-dot -Tsvg output/spec_composed.dot -o output/spec_composed.svg
+dot -Tsvg my_sts.dot -o my_sts.svg
 
 # PNG
-dot -Tpng output/spec_composed.dot -o output/spec_composed.png
+dot -Tpng my_sts.dot -o my_sts.png
 ```
 
 ## Editor support
 
-A VS Code extension for `.pickles` syntax highlighting is available in `pickles-vscode/`. It isn't published to the Marketplace, so install it manually:
+The folder `pickles-vscode/` contains a VS Code extension for `.pickles` files. It provides:
+- Syntax highlighting.
+- An Outline view with the declared variables, constants, and the When/Then gates of each scenario.
+- Diagnostics: syntax errors and semantic errors (for example, undeclared variables or guards with incorrect types).
+- Keyword completion.
 
-1. Locate your VS Code extensions folder:
-    - Linux/macOS: `~/.vscode/extensions`
-    - Windows: `%USERPROFILE%\.vscode\extensions`
-2. Copy `pickles-vscode/` into that folder, naming the copy `<publisher>.<name>-<version>` (VS Code uses this to identify the extension), e.g.:
+The extension is not in the Marketplace. Install it manually:
+
+1. Build the extension:
 
     ```bash
-    cp -r pickles-vscode ~/.vscode/extensions/pickles.pickles-syntax-0.1.0
+    cd pickles-vscode
+    npm install
+    npm run compile
     ```
 
-3. Open the copy's `package.json` and add a `"publisher"` field matching the name you chose above:
+2. Install the Python dependencies of the language server. Use the same `requirements.txt` (it includes `pygls`):
+
+    ```bash
+    conda activate pickles
+    pip install -r ../requirements.txt
+    ```
+
+    Get the absolute paths of the Python interpreter and of `pickles_lsp_server.py`. You need them in step 5:
+
+    ```bash
+    which python                         # -> e.g. /home/you/miniconda3/envs/pickles/bin/python
+    realpath ../pickles_lsp_server.py    # -> e.g. /home/you/pickles-translator/pickles_lsp_server.py
+    ```
+
+3. Find your VS Code extensions folder:
+    - Linux/macOS: `~/.vscode/extensions`
+    - Windows: `%USERPROFILE%\.vscode\extensions`
+  NOTE: This was only tested for Linux.
+
+4. Copy `pickles-vscode/` into that folder. Use the name `<publisher>.<name>-<version>`, for example:
+
+    ```bash
+    cp -r pickles-vscode ~/.vscode/extensions/pickles.pickles-syntax-0.2.0
+    ```
+
+5. Reload VS Code (Command Palette → **Developer: Reload Window**). Then set the two paths from step 2. Open Settings (Ctrl/Cmd+,), search for "pickles", and fill in **Server Script** and **Python Path**. Or add them to `settings.json` (Command Palette → **Preferences: Open User Settings (JSON)**):
 
     ```json
     {
-      "name": "pickles-syntax",
-      "publisher": "pickles",
-      "version": "0.1.0",
-      ...
+      "pickles.pythonPath": "/home/you/miniconda3/envs/pickles/bin/python",
+      "pickles.serverScript": "/home/you/pickles-translator/pickles_lsp_server.py"
     }
     ```
 
-4. Reload VS Code (Command Palette → **Developer: Reload Window**, or just restart it).
-5. Open any `.pickles` file — it should now be syntax highlighted.
+    - `pickles.serverScript` is mandatory. If it is not set, the extension shows a warning and does not start.
+    - `pickles.pythonPath` defaults to `python` on your `PATH`..
 
-## Using the exporter directly
+6. Open a `.pickles` file. Make sure that it has syntax highlighting and that the Outline view (Ctrl+Shift+O) shows its variables, constants and scenarios.
 
-`STSExporter` can be used standalone on any STS JSON:
+    If it does not work, open the **Output** panel and select **Pickles Language Server**. The usual causes are an incorrect `pickles.pythonPath` or an incorrect `pickles.serverScript`.
 
-```python
-from exporter import STSExporter
-
-exporter = STSExporter(sts_dict)
-exporter.write_dot("my_sts.dot")
-exporter.write_html("my_sts.html")
-
-dot_src  = exporter.to_dot()
-html_src = exporter.to_html()
-```
-
-## Reproduce paper results
-
-### Setup
-
-#### Docker CLI
-Make sure [Docker CLI](https://www.docker.com/products/cli/) is installed in the system.
-
-#### Load image
-To load the artifact Docker image, execute:
-```
-docker load --input pickles_translator.tar.gz
-```
-
-### Generate master model from Pickles specifications
-File `spec_examples/detectors_spec.pickles` contains the Pickles specification presented in Listing 1 in the paper. To get the master model, execute:
-```
-make execute-sts SPEC=spec_examples/detectors_spec.pickles
-```
-This command should take a couple of seconds. Expected console output:
-```
-============================================================
-Processing: detectors_spec.pickles  (4 scenario(s))
-============================================================
-  [partial STSs]  -> output/[TIMESTAMP]_detectors_spec.json
-  [composed STS]  -> output/[TIMESTAMP]_detectors_spec_composed.json
-    locations : 25
-    switches  : 40
-    guards    : 10
-  [dot]           -> output/[TIMESTAMP]_detectors_spec_composed.dot
-  [html]          -> output/[TIMESTAMP]_detectors_spec_composed.html
-
-============================================================
-Done.
-```
-To visualize the composed STS, there are two options:
-1. Open file `output/[TIMESTAMP]_detectors_spec_composed.html` in a browser: this will provide an interactive visualization of the STS where switches can be clicked to see more details
-1. Execute `make sts-dot-to-png`: This will generate a .png file in `/output` with the visualization of the latest composed STS.
-
-NOTE: Figure 3 in the paper shows a version of the same STS where non-satisfiable paths have been removed. This was done manually as the current version of the tool does not support this.
-
-### Formal test case translation to Pickles
-Execute:
-```
-make translate-tests TESTS=./test_examples/detectors_tests.json
-```
-This will generate the Pickles translation of the test cases defined in the json, based on the latest STS generated (present in `/output`). To point to a specific STS .json file:
-```
-make translate-tests STS=./path/to/sts.json TESTS=./test_examples/detectors_tests.json
-```
-In both cases, the file `[TIMESTAMP]_[STS_FILENAME]_test_cases.pickles` with the test cases in Pickles syntax. Test Case 1 corresponds to the test case introduced in Listing 2 in the paper.
